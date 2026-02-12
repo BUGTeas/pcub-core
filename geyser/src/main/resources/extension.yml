@@ -1,0 +1,6 @@
+# 用于 Geyser 扩展
+id: pcub-core
+name: ${name}
+main: org.pcub.core.geyser.PCUBCoreExtension
+api: ${geyserVersion}
+version: ${version}
