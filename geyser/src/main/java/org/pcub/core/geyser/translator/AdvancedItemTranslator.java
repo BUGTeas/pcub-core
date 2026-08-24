@@ -172,12 +172,13 @@ public class AdvancedItemTranslator {
         }
         CustomModelData.CustomModelDataBuilder cmdBuilder;
         if (cmd != null) {
-            List<Float> cmdFloats = List.of((float) newValue); /// 仅限无任何现有值的情况，否则需改为插入新值（后期预留）
+            List<Float> cmdFloats = List.of((float) newValue); //todo: 需兼容 1.21.4+ 仅限无任何现有值的情况，否则需改为插入新值（后期预留）
             List<String> cmdStrings = new ArrayList<>(cmd.strings());
             cmdStrings.add(CMD_MODDED_TAG); // 附加标记
             cmdBuilder = cmd.toBuilder().floats(cmdFloats).strings(cmdStrings);
         } else {
             // 新建组件
+            // todo: 需兼容 1.21.4+
             cmdBuilder = CustomModelData.builder().colors(List.of()).flags(List.of())
                     .floats(List.of((float) newValue))
                     .strings(List.of(CMD_ADDED_TAG)); // 新建标记

@@ -58,7 +58,9 @@ public class ItemHashCache {
     }
 
     public int getOrigin(int hashed) {
-        return cache.get(hashed);
+        synchronized (cache) { // TODO: 实现线程安全的缓存读写
+            return cache.get(hashed);
+        }
     }
 
 
@@ -116,45 +118,33 @@ public class ItemHashCache {
      * @param origin 原始数据 (为空则解析为 0)
      * @return 原有或新解析的原始值
      */
-    public <T> int put(GeyserSession session, DataComponentType<T> componentType, T applied, T origin) {
-        return put(session, DataComponentHashers.hasher(componentType), applied, origin);
+    public <T> void put(GeyserSession session, DataComponentType<T> componentType, T applied, T origin) {
+        put(session, DataComponentHashers.hasher(componentType), applied, origin);
     }
 
-    public <T> int put(GeyserSession session, MinecraftHasher<T> hasher, T applied, T origin) {
+    public <T> void put(GeyserSession session, MinecraftHasher<T> hasher, T applied, T origin) {
         MinecraftHashEncoder encoder = new MinecraftHashEncoder(session.getRegistryCache());
-        int hashed = hasher.hash(applied, encoder).asInt();
-        int originGet = cache.remove(hashed);
-        if (originGet != cache.defaultReturnValue()) {
-            cache.put(hashed, originGet);
-            logger().debug("排序 " + hashed + " -> " + originGet);
-            return originGet;
-        } else {
-            int originParsed = origin == null ? 0 : hasher.hash(origin, encoder).asInt();
-            cache.put(hashed, originParsed);
-            checkSize();
-            logger().debug("新增 " + hashed + " -> " + originParsed);
-            return originParsed;
-        }
+        put(hasher.hash(applied, encoder).asInt(),
+                () -> origin == null ? 0 : hasher.hash(origin, encoder).asInt());
     }
 
     /**
      * @param hashed 需要获取对应原始值的新值
      * @param originIfNotExist 仅此前未存储过原始值时，才会解析
-     * @return 原有或新解析的原始值
      */
-    public int put(int hashed, IntSupplier originIfNotExist) {
-        int originGet = cache.remove(hashed);
-        if (originGet != cache.defaultReturnValue()) {
-            cache.put(hashed, originGet);
-            logger().debug("排序 " + hashed + " -> " + originGet);
-            return originGet;
-        } else {
-            int originParsed = originIfNotExist.getAsInt();
-            cache.put(hashed, originParsed);
-            checkSize();
-            logger().debug("新增 " + hashed + " -> " + originParsed);
-            return originParsed;
+    public void put(int hashed, IntSupplier originIfNotExist) {
+        boolean originFound;
+        int origin;
+        synchronized (cache) { // TODO: 实现线程安全的缓存读写
+            int originGet = cache.remove(hashed);
+            if (originFound = originGet != cache.defaultReturnValue()) {
+                cache.put(hashed, origin = originGet);
+            } else {
+                cache.put(hashed, origin = originIfNotExist.getAsInt());
+                checkSize();
+            }
         }
+        logger().debug(() -> (originFound ? "排序 " : "新增 ") + hashed + " -> " + origin);
     }
 
     /**
@@ -162,11 +152,13 @@ public class ItemHashCache {
      * @param origin 新值对应的原始值
      */
     public void put(int hashed, int origin) {
-        int originGet = cache.remove(hashed);
-        boolean originFound = originGet != cache.defaultReturnValue();
-        cache.put(hashed, origin);
-        if (!originFound) {
-            checkSize();
+        boolean originFound;
+        synchronized (cache) { // TODO: 实现线程安全的缓存读写
+            originFound = cache.remove(hashed) != cache.defaultReturnValue();
+            cache.put(hashed, origin);
+            if (!originFound) {
+                checkSize();
+            }
         }
         logger().debug(() -> (originFound ? "排序 " : "新增 ") + hashed + " -> " + origin);
     }
