@@ -9,6 +9,8 @@ dependencies {
     compileOnly(project(":common"))
     compileOnlyApi("org.geysermc.geyser:api:$geyserVersion-SNAPSHOT")
     compileOnly("org.geysermc.geyser:core:$geyserVersion-SNAPSHOT")
+    // 显式依赖 Geyser 内置库
+    compileOnly("org.cloudburstmc.fastutil.maps:object-boolean-maps:8.5.15-SNAPSHOT")
 }
 
 tasks {

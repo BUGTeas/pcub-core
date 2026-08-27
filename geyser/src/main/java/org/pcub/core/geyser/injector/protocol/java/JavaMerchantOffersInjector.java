@@ -43,10 +43,10 @@ public class JavaMerchantOffersInjector extends PacketTranslator<ClientboundMerc
                     getItemName(offer.getResult()));
             // 材料
             VillagerTrade.ItemCost costA = offer.getItemCostA();
-            AdvancedItemTranslator.apply(session, costA.itemId(), new DataComponents(costA.components()), true);
+            AdvancedItemTranslator.apply(session, costA.itemId(), costA.count(), new DataComponents(costA.components()), true);
             VillagerTrade.ItemCost costB = offer.getItemCostB();
             if (costB != null) {
-                AdvancedItemTranslator.apply(session, costB.itemId(), new DataComponents(costB.components()), true);
+                AdvancedItemTranslator.apply(session, costB.itemId(), costB.count(), new DataComponents(costB.components()), true);
             }
             // 目标
             AdvancedItemTranslator.apply(session, offer.getResult(), true);

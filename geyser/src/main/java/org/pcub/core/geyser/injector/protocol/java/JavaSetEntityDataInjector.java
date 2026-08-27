@@ -20,7 +20,7 @@ public class JavaSetEntityDataInjector extends PacketTranslator<ClientboundSetEn
     @Override
     public void translate(GeyserSession session, ClientboundSetEntityDataPacket packet) {
         logger().debug(() -> "\t\tClientboundSetEntityDataPacket  " +
-                session.getEntityCache().getEntityByJavaId(packet.getEntityId()).getDefinition().entityType().toString() +
+                session.getEntityCache().getEntityByJavaId(packet.getEntityId()).getEntityType().toString() +
                 "(" + packet.getEntityId() + ")");
 
         for (EntityMetadata<?, ?> metadata : packet.getMetadata()) {
