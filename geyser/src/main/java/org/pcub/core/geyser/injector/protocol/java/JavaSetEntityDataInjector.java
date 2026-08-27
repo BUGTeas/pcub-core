@@ -26,7 +26,7 @@ public class JavaSetEntityDataInjector extends PacketTranslator<ClientboundSetEn
         for (EntityMetadata<?, ?> metadata : packet.getMetadata()) {
             MetadataType<?> type = metadata.getType();
             if (type == MetadataTypes.ITEM_STACK) {
-                logger().debug(() -> "MetadataTypes.ITEM_STACK");
+                logger().debug("MetadataTypes.ITEM_STACK");
 
                 ItemStack javaItem = ((EntityMetadata<ItemStack, MetadataType<ItemStack>>) metadata).getValue();
                 logger().debug(() -> getItemName(javaItem));
@@ -34,11 +34,11 @@ public class JavaSetEntityDataInjector extends PacketTranslator<ClientboundSetEn
                     AdvancedItemTranslator.apply(session, javaItem, false);
                 }
             } else if (type == MetadataTypes.PARTICLE) {
-                logger().debug(() -> "MetadataTypes.PARTICLE"); // TODO test only
+                logger().debug("MetadataTypes.PARTICLE"); // TODO test only
 
 //                Particle particle = ((EntityMetadata<Particle, MetadataType<Particle>>) metadata).getValue();
             } else if (type == MetadataTypes.PARTICLES) {
-                logger().debug(() -> "MetadataTypes.PARTICLES S"); // TODO test only
+                logger().debug("MetadataTypes.PARTICLES S"); // TODO test only
 
 //                List<Particle> particles = ((EntityMetadata<List<Particle>, MetadataType<List<Particle>>>) metadata).getValue();
             }

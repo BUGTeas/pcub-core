@@ -18,7 +18,7 @@ public class JavaLevelParticlesInjector extends PacketTranslator<ClientboundLeve
 
     @Override
     public void translate(GeyserSession session, ClientboundLevelParticlesPacket packet) {
-        logger().debug(() -> "\t\tClientboundLevelParticlesPacket");
+        logger().debug("\t\tClientboundLevelParticlesPacket");
 
         if (packet.getParticle().getType() == ParticleType.ITEM) {
             ItemStack javaItem = ((ItemParticleData) packet.getParticle().getData()).getItemStack();

@@ -16,7 +16,7 @@ public class JavaSetEquipmentInjector extends PacketTranslator<ClientboundSetEqu
 
     @Override
     public void translate(GeyserSession session, ClientboundSetEquipmentPacket packet) {
-        logger().debug(() -> "\t\tClientboundSetEquipmentPacket");
+        logger().debug("\t\tClientboundSetEquipmentPacket");
 
         for (Equipment equipment : packet.getEquipment()) {
             logger().debug(() -> getItemName(equipment.getItem()));

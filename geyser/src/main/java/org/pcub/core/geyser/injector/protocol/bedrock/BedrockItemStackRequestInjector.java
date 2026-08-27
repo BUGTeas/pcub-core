@@ -135,7 +135,7 @@ public class BedrockItemStackRequestInjector extends PacketTranslator<ItemStackR
 
                                     List<ItemStack> bundleContents = bundleData.toComponent();
                                     // TODO: 需特别留意，如果袋中已有的相同物品，Geyser 不会将其合并，任由其与服务端数据不同步而被刷新 (截止至 2.9.2-b1013)
-                                    bundleContents.add(0, sourceItem.getItemStack(sourceCount));
+                                    bundleContents.addFirst(sourceItem.getItemStack(sourceCount));
 
                                     List<ItemStack> originBundleCont = AdvancedItemTranslator.restoreFrom(bundleContents);
                                     if (originBundleCont != null) {

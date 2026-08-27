@@ -17,7 +17,7 @@ public class JavaContainerSetContentInjector extends PacketTranslator<Clientboun
     @Override
     public void translate(GeyserSession session, ClientboundContainerSetContentPacket packet) {
         logger().debug(() -> {
-            StringBuilder str = new StringBuilder("\t\tClientboundContainerSetContentPacket  " + getItemName(packet.getCarriedItem()));
+            StringBuilder str = new StringBuilder("\t\tClientboundContainerSetContentPacket  ").append(getItemName(packet.getCarriedItem()));
             for (int i = 0; i < packet.getItems().length; i++) {
                 if (i % 9 == 0) {
                     str.append("\n");
