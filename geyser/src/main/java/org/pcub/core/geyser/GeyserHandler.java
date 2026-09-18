@@ -3,6 +3,8 @@ package org.pcub.core.geyser;
 import org.geysermc.api.util.ApiVersion;
 import org.geysermc.geyser.GeyserImpl;
 import org.geysermc.geyser.api.GeyserApi;
+import org.geysermc.geyser.api.event.EventRegistrar;
+import org.geysermc.geyser.api.event.lifecycle.GeyserPostInitializeEvent;
 import org.geysermc.geyser.api.item.custom.v2.CustomItemDefinition;
 import org.geysermc.geyser.api.predicate.MinecraftPredicate;
 import org.geysermc.geyser.api.predicate.context.item.ItemPredicateContext;
@@ -22,9 +24,18 @@ import java.util.regex.Matcher;
 
 import static org.pcub.core.common.PCUBCore.logger;
 
-public class GeyserHandler {
+public class GeyserHandler implements EventRegistrar {
     public static final String EXPECT_GEYSER_VER = "2.11.2-b1232 (git-master-32e7fe1)";
     public static final int[] EXPECT_GEYSER_API_VER = {2,11,2};
+
+    // 供非 Geyser 扩展使用
+    public static void subscribeInit(Runnable callback) {
+        GeyserApi geyserApi = GeyserApi.api();
+        geyserApi.eventBus().subscribe(new GeyserHandler(), GeyserPostInitializeEvent.class, event -> {
+            callback.run();
+            init(geyserApi);
+        });
+    }
 
     public static void init(GeyserApi api) {
         ApiVersion geyserApiVer = api.geyserApiVersion();
