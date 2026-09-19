@@ -78,6 +78,12 @@ public class GeyserHandler implements EventRegistrar {
                     if (matcher.find()) {
                         PotionColorMapping.predicate2Color.put(stringPredicate, Integer.parseInt(matcher.group(1)));
                         AdvancedItemTranslator.advancePredicateHandlers.put(stringPredicate, potionColorCreator);
+//
+//                        modification.modifyComponents(comp -> comp.toBuilder()
+//                                .putCompound("item_properties",
+//                                        comp.getCompound("item_properties").toBuilder()
+//                                                .putString("pcub_core_test", "test")
+//                                                .build()));
                     }
                 }
             }

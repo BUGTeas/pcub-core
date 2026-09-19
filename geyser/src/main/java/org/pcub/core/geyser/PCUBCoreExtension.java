@@ -3,7 +3,6 @@ package org.pcub.core.geyser;
 import org.geysermc.event.subscribe.Subscribe;
 import org.geysermc.geyser.api.GeyserApi;
 import org.geysermc.geyser.api.event.lifecycle.GeyserPostInitializeEvent;
-import org.geysermc.geyser.api.event.lifecycle.GeyserShutdownEvent;
 import org.geysermc.geyser.api.extension.Extension;
 import org.pcub.core.common.PCUBCore;
 import org.pcub.core.common.PCUBCoreLogger;
@@ -23,9 +22,5 @@ public class PCUBCoreExtension implements Extension {
 
         logger.info("扩展模式下将只加载 Geyser 功能");
         GeyserHandler.init(GeyserApi.api());
-    }
-    @Subscribe
-    public void onShutdown(GeyserShutdownEvent event) {
-//        CustomItemRegistryModifier.dump();
     }
 }
