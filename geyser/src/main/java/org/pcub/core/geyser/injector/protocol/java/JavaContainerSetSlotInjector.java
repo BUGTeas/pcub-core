@@ -15,7 +15,7 @@ public class JavaContainerSetSlotInjector extends PacketTranslator<ClientboundCo
 
     @Override
     public void translate(GeyserSession session, ClientboundContainerSetSlotPacket packet) {
-        logger().debug(() -> "\t\tClientboundContainerSetSlotPacket  " + getItemName(packet.getItem()));
+        logger().debug(() -> "\t\tClientboundContainerSetSlotPacket  %s %s".formatted(packet.getSlot(), getItemName(packet.getItem())));
 
         if (packet.getItem() != null) {
             AdvancedItemTranslator.apply(session, packet.getItem(), true);

@@ -33,6 +33,7 @@ public class PotionColorMapping implements ItemSimilarityHandler {
             // TODO: 自动颜色
             return null;
         }
+        logger().debug("药水颜色: " + potionColor);
         return new PotionColorMapping(potionColor);
     };
 

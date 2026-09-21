@@ -275,7 +275,7 @@ public class AdvancedItemTranslator {
         // 将原始组件转为 hash 供服务器物品校验
         ItemHashCache.INSTANCE.put(session, DataComponentTypes.CUSTOM_MODEL_DATA, newCMD, cmd);
 
-        logger().debug(() -> Arrays.toString(newCMD.strings().toArray()));
+        logger().debug(() -> "伪CMD" + Arrays.toString(newCMD.strings().toArray()));
         return true;
     }
 
@@ -364,11 +364,12 @@ public class AdvancedItemTranslator {
 
     public static String getItemName(int id) {
         List<Item> itemList = Registries.JAVA_ITEMS.get();
-        if (id < 0 || id >= itemList.size()) {
-            return null;
+        if (id > 0 && id < itemList.size()) {
+            Item item = itemList.get(id);
+            if (item != null) {
+                return item.javaIdentifier().replaceAll("^minecraft:", "mc:") + "(" + id + ")";
+            }
         }
-        Item item = itemList.get(id);
-        if (item == null) return id + "";
-        return item.javaIdentifier().replaceAll("^minecraft:", "mc:") + "(" + id + ")";
+        return "?(" + id + ")";
     }
 }
