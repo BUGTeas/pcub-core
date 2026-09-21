@@ -42,6 +42,6 @@ public class BukkitLogger implements PCUBCoreLogger {
 
     @Override
     public boolean isDebug() {
-        return true;//todo: 配置文件系统
+        return false;// TODO: 配置文件系统
     }
 }
