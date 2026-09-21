@@ -3,6 +3,7 @@ package org.pcub.core.geyser.translator;
 import com.google.common.collect.SortedSetMultimap;
 import net.kyori.adventure.key.Key;
 import org.checkerframework.checker.nullness.qual.NonNull;
+import org.checkerframework.checker.nullness.qual.Nullable;
 import org.geysermc.geyser.api.predicate.MinecraftPredicate;
 import org.geysermc.geyser.api.predicate.PredicateStrategy;
 import org.geysermc.geyser.api.predicate.context.item.ItemPredicateContext;
@@ -16,7 +17,6 @@ import org.geysermc.geyser.registry.Registries;
 import org.geysermc.geyser.session.GeyserSession;
 import org.geysermc.mcprotocollib.protocol.data.game.item.ItemStack;
 import org.geysermc.mcprotocollib.protocol.data.game.item.component.*;
-import org.jspecify.annotations.Nullable;
 import org.pcub.core.geyser.cache.ItemHashCache;
 import org.pcub.core.geyser.item.ItemSimilarityHandler;
 
@@ -32,7 +32,7 @@ public class AdvancedItemTranslator {
     // 特殊谓词，预先构造
     // public static Map<MinecraftPredicate<?>, Predicate<DataComponents>> SPECIAL_PREDICATES = new HashMap<>();
     // 提供相似度匹配处理器，每个物品实例对应一个处理器实例
-    public static Map<MinecraftPredicate<?>, BiFunction<ItemPredicateContext, DataComponents, ItemSimilarityHandler>> SIMILARITY_HANDLER_SUPPLIERS = new HashMap<>();
+    public static Map<MinecraftPredicate<?>, BiFunction<ItemPredicateContext, DataComponents, @Nullable ItemSimilarityHandler>> SIMILARITY_HANDLER_SUPPLIERS = new HashMap<>();
 
     public static void recordPredicate(MinecraftPredicate<? super ItemPredicateContext> predicate,
                                 BiFunction<ItemPredicateContext, DataComponents, ItemSimilarityHandler> handlerSupplier, String holder) {
@@ -190,6 +190,18 @@ public class AdvancedItemTranslator {
                     ItemPredicateContext finalGeyserContext = geyserContext;
                     ItemSimilarityHandler similarityHandler = loadedHandlers.computeIfAbsent(similarityHandlerSupplier,
                             x -> similarityHandlerSupplier.apply(finalGeyserContext, fullComponents));
+
+                    // 如果物品数据不满足某些自定的前提条件（如所需数据不存在），可能会返回 null 而非处理器实例
+                    if (similarityHandler == null) {
+                        if (needsOnlyOneMatch) {
+                            // 或条件 跳过此谓词
+                            continue;
+                        } else {
+                            // 与条件 直接跳过此映射
+                            allMatch = false; // 若已存入临时区，则取消
+                            break;
+                        }
+                    }
 
                     if (similarityPredicates == null) {
                         similarityPredicates = new HashMap<>();

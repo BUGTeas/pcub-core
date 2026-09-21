@@ -3,6 +3,7 @@ package org.pcub.core.geyser.item;
 import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap;
 import it.unimi.dsi.fastutil.ints.IntSet;
 import it.unimi.dsi.fastutil.objects.Object2IntOpenHashMap;
+import org.checkerframework.checker.nullness.qual.Nullable;
 import org.geysermc.geyser.api.predicate.MinecraftPredicate;
 import org.geysermc.geyser.api.predicate.context.item.ItemPredicateContext;
 import org.geysermc.geyser.api.predicate.item.CustomModelDataPredicate;
@@ -22,7 +23,18 @@ public class PotionColorMapping implements ItemSimilarityHandler {
     public static String CMD_POTION_PREFIX = "pcubc_potion_color_";
     public static Pattern CMD_POTION_PATTERN = Pattern.compile("^%s([0-9]+)$".formatted(CMD_POTION_PREFIX));
 
-    public static BiFunction<ItemPredicateContext, DataComponents, ItemSimilarityHandler> SIMILARITY_HANDLER_SUPPLIER = PotionColorMapping::new;
+    public static BiFunction<ItemPredicateContext, DataComponents, @Nullable ItemSimilarityHandler> SIMILARITY_HANDLER_SUPPLIER = (geyserContext, components) -> {
+        PotionContents potionContents = components.get(DataComponentTypes.POTION_CONTENTS);
+        if (potionContents == null) {
+            return null;
+        }
+        int potionColor = potionContents.getCustomColor();
+        if (potionColor == -1) {
+            // TODO: 自动颜色
+            return null;
+        }
+        return new PotionColorMapping(potionColor);
+    };
 
     public static int getCloserPotionColor(int potionColor, IntSet possibleColors) {
         // 匹配相同药水颜色
@@ -106,7 +118,7 @@ public class PotionColorMapping implements ItemSimilarityHandler {
 
 
     // 当前物品数据
-    private int potionColor = -1;
+    private final int potionColor;
     // 距离匹配用
     private final Int2ObjectOpenHashMap<MinecraftPredicate<?>> potionMappings = new Int2ObjectOpenHashMap<>(); // <color, predicate>
 
@@ -131,13 +143,7 @@ public class PotionColorMapping implements ItemSimilarityHandler {
         }
     }
 
-    public PotionColorMapping(ItemPredicateContext geyserContext, DataComponents components) {
-        PotionContents potionContents = components.get(DataComponentTypes.POTION_CONTENTS);
-        if (potionContents != null) {
-            potionColor = potionContents.getCustomColor();
-            if (potionColor == -1) {
-                // TODO: 自动颜色
-            }
-        }
+    private PotionColorMapping(int potionColor) {
+        this.potionColor = potionColor;
     }
 }
