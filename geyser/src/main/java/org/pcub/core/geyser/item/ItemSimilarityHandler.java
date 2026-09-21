@@ -10,13 +10,13 @@ public interface ItemSimilarityHandler {
 
     /**
      * 记录当前物品实例可触及的匹配项
-     * @param predicate 匹配项的占位符谓词
+     * @param predicate 匹配项的占位谓词
      */
     void selectPredicate(MinecraftPredicate<?> predicate);
 
     /**
      * 得出与当前物品实例最相似的匹配项
-     * @return 匹配项的占位符谓词
+     * @return 匹配项的占位谓词
      */
     @Nullable
     MinecraftPredicate<?> getClosestPredicate();

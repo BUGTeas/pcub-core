@@ -81,7 +81,7 @@ public class PotionColorMapping implements ItemSimilarityHandler {
 
     public static void recordPredicate(MinecraftPredicate<? super ItemPredicateContext> predicate, int color, String holder) {
         PREDICATE_TO_COLOR.put(predicate, color);
-        AdvancedItemTranslator.recordPredicate(predicate, SIMILARITY_HANDLER_SUPPLIER, holder);
+        AdvancedItemTranslator.recordSimilarityPredicate(predicate, SIMILARITY_HANDLER_SUPPLIER, holder);
     }
 
     public static boolean recordPredicate(MinecraftPredicate<? super ItemPredicateContext> predicate) {

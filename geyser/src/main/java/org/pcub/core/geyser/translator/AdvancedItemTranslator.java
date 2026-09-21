@@ -34,8 +34,14 @@ public class AdvancedItemTranslator {
     // 提供相似度匹配处理器，每个物品实例对应一个处理器实例
     public static Map<MinecraftPredicate<?>, BiFunction<ItemPredicateContext, DataComponents, @Nullable ItemSimilarityHandler>> SIMILARITY_HANDLER_SUPPLIERS = new HashMap<>();
 
-    public static void recordPredicate(MinecraftPredicate<? super ItemPredicateContext> predicate,
-                                BiFunction<ItemPredicateContext, DataComponents, ItemSimilarityHandler> handlerSupplier, String holder) {
+    /**
+     * 将相似度匹配处理器和占位谓词（或所处的组合谓词）绑定
+     * @param predicate 占位谓词，请确保其直接定义在映射项而非组合谓词（{@code and / or}）中，或连根将整个组合谓词传入（性能较差）
+     * @param handlerSupplier 处理器实例构造器，每个物品实例构造一个处理器，当不满足需求（如所需组件不存在）时可传入 {@code null} 而不构造，以示此条件不成立
+     * @param holder 匹配成功时，会使用其伪装物品的 CMD。需要和占位谓词所检查的 CMD 字符串一致，以欺骗 Geyser 匹配映射
+     */
+    public static void recordSimilarityPredicate(MinecraftPredicate<? super ItemPredicateContext> predicate,
+                                BiFunction<ItemPredicateContext, DataComponents, @Nullable ItemSimilarityHandler> handlerSupplier, String holder) {
         SIMILARITY_HANDLER_SUPPLIERS.put(predicate, handlerSupplier);
         SPECIAL_PREDICATE_HOLDERS.put(predicate, holder);
     }
@@ -160,14 +166,14 @@ public class AdvancedItemTranslator {
             boolean needsOnlyOneMatch = customMapping.definition().predicateStrategy() == PredicateStrategy.OR;
             boolean allMatch = true;
 
-            Map<ItemSimilarityHandler, MinecraftPredicate<? super ItemPredicateContext>> similarityPredicates = null;
+            Map<ItemSimilarityHandler, MinecraftPredicate<? super ItemPredicateContext>> simPredicates = null;
 
             List<MinecraftPredicate<? super ItemPredicateContext>> predicates = customMapping.definition().predicates();
 
             for (var predicate : predicates) {
                 // 特殊条件收集
-                var similarityHandlerSupplier = SIMILARITY_HANDLER_SUPPLIERS.get(predicate);
-                if (similarityHandlerSupplier != null) {
+                var simHandlerSupplier = SIMILARITY_HANDLER_SUPPLIERS.get(predicate);
+                if (simHandlerSupplier != null) {
                     // 相似度匹配
 
                     // 首先排除固定索引值超出物品现有 CMD 列表大小的的文本谓词（专用谓词不需要索引）
@@ -188,11 +194,11 @@ public class AdvancedItemTranslator {
                         geyserContext = GeyserItemPredicateContext.create(session, amount, fullComponents);
                     }
                     ItemPredicateContext finalGeyserContext = geyserContext;
-                    ItemSimilarityHandler similarityHandler = loadedHandlers.computeIfAbsent(similarityHandlerSupplier,
-                            x -> similarityHandlerSupplier.apply(finalGeyserContext, fullComponents));
+                    ItemSimilarityHandler simHandler = loadedHandlers.computeIfAbsent(simHandlerSupplier,
+                            x -> simHandlerSupplier.apply(finalGeyserContext, fullComponents));
 
-                    // 如果物品数据不满足某些自定的前提条件（如所需数据不存在），可能会返回 null 而非处理器实例
-                    if (similarityHandler == null) {
+                    // 当物品数据不满足某些自定条件时（如所需数据不存在）可能会返回 null 而非处理器实例
+                    if (simHandler == null) {
                         if (needsOnlyOneMatch) {
                             // 或条件 跳过此谓词
                             continue;
@@ -203,13 +209,13 @@ public class AdvancedItemTranslator {
                         }
                     }
 
-                    if (similarityPredicates == null) {
-                        similarityPredicates = new HashMap<>();
+                    if (simPredicates == null) {
+                        simPredicates = new HashMap<>();
                     }
 
                     // 先暂存，稍后检查通过才添加
                     // 如果一处理器具有多个匹配项，或条件只需匹配其一，与条件则完全不能匹配
-                    MinecraftPredicate<?> stagedPredicate = similarityPredicates.putIfAbsent(similarityHandler, predicate);
+                    MinecraftPredicate<?> stagedPredicate = simPredicates.putIfAbsent(simHandler, predicate);
                     if (!needsOnlyOneMatch && stagedPredicate != null) {
                         // 与条件 已有匹配项，直接跳过此映射（提前检测以减少开销，后续检查全部谓词时也会跳过）
                         allMatch = false; // 若已存入临时区，则取消
@@ -219,12 +225,12 @@ public class AdvancedItemTranslator {
                 // TODO: 特殊谓词匹配
             }
 
-            if (!allMatch || similarityPredicates == null) {
+            if (!allMatch || simPredicates == null) {
                 continue;
             }
 
             DataComponents fakeFullComponents = fullComponents.clone();
-            fakeFullComponents.put(DataComponentTypes.CUSTOM_MODEL_DATA, applyNewCMD(cmd, similarityPredicates.values()));
+            fakeFullComponents.put(DataComponentTypes.CUSTOM_MODEL_DATA, applyNewCMD(cmd, simPredicates.values()));
             ItemPredicateContext fakeContext = GeyserItemPredicateContext.create(session, amount, fakeFullComponents);
 
             // 与条件 需检查全部谓词
@@ -239,7 +245,7 @@ public class AdvancedItemTranslator {
             }
 
             if (allMatch) {
-                similarityPredicates.forEach((handlerInstance, predicate) -> {
+                simPredicates.forEach((handlerInstance, predicate) -> {
                     // 单个相似度匹配也可能会和其它条件组合，故或条件需在此检查
                     if (!needsOnlyOneMatch || predicate.test(fakeContext)) {
                         handlerInstance.selectPredicate(predicate);
