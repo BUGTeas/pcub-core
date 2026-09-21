@@ -8,19 +8,14 @@ import org.geysermc.geyser.api.event.lifecycle.GeyserPostInitializeEvent;
 import org.geysermc.geyser.api.item.custom.v2.CustomItemDefinition;
 import org.geysermc.geyser.api.predicate.MinecraftPredicate;
 import org.geysermc.geyser.api.predicate.context.item.ItemPredicateContext;
-import org.geysermc.geyser.api.predicate.item.CustomModelDataPredicate;
-import org.geysermc.mcprotocollib.protocol.data.game.item.component.DataComponents;
 import org.pcub.core.geyser.cache.ItemHashCache;
 import org.pcub.core.geyser.injector.Injector4Geyser;
 import org.pcub.core.geyser.item.PotionColorMapping;
 import org.pcub.core.geyser.listener.EventListener4Geyser;
 import org.pcub.core.geyser.injector.CustomItemRegistryModifier;
-import org.pcub.core.geyser.translator.AdvancedItemTranslator;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.function.Function;
-import java.util.regex.Matcher;
 
 import static org.pcub.core.common.PCUBCore.logger;
 
@@ -65,28 +60,16 @@ public class GeyserHandler implements EventRegistrar {
         }
 
         logger().info("注册药水颜色映射...");
-        Function<DataComponents, PotionColorMapping> potionColorCreator = PotionColorMapping::new;
         CustomItemRegistryModifier.forEach((protocolVersion, customMapping, modification) -> {
             CustomItemDefinition mappingDefinition = customMapping.definition();
             for (MinecraftPredicate<? super ItemPredicateContext> predicate : mappingDefinition.predicates()) {
-                if (predicate instanceof CustomModelDataPredicate.StringPredicate stringPredicate) {
-                    String string = stringPredicate.string();
-                    if (string == null || stringPredicate.negated()) {
-                        continue;
-                    }
-                    Matcher matcher = PotionColorMapping.CMD_POTION_PATTERN.matcher(string);
-                    if (matcher.find()) {
-                        PotionColorMapping.predicate2Color.put(stringPredicate, Integer.parseInt(matcher.group(1)));
-                        AdvancedItemTranslator.advancePredicateHandlers.put(stringPredicate, potionColorCreator);
-//
-//                        modification.modifyComponents(comp -> comp.toBuilder()
-//                                .putCompound("item_properties",
-//                                        comp.getCompound("item_properties").toBuilder()
-//                                                .putString("pcub_core_test", "test")
-//                                                .build()));
-                    }
-                }
+                PotionColorMapping.recordPredicate(predicate);
             }
+            // modification.modifyComponents(comp -> comp.toBuilder()
+            //         .putCompound("item_properties",
+            //                 comp.getCompound("item_properties").toBuilder()
+            //                         .putString("pcub_core_test", "test")
+            //                         .build()));
         });
 
         logger().info("介入到收包监听器...");

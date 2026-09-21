@@ -1,22 +1,32 @@
 package org.pcub.core.geyser.item;
 
 import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap;
+import it.unimi.dsi.fastutil.ints.IntSet;
 import it.unimi.dsi.fastutil.objects.Object2IntOpenHashMap;
+import org.geysermc.geyser.api.predicate.MinecraftPredicate;
+import org.geysermc.geyser.api.predicate.context.item.ItemPredicateContext;
 import org.geysermc.geyser.api.predicate.item.CustomModelDataPredicate;
 import org.geysermc.mcprotocollib.protocol.data.game.item.component.DataComponentTypes;
 import org.geysermc.mcprotocollib.protocol.data.game.item.component.DataComponents;
 import org.geysermc.mcprotocollib.protocol.data.game.item.component.PotionContents;
+import org.pcub.core.geyser.translator.AdvancedItemTranslator;
 
+import java.util.function.BiFunction;
+import java.util.function.UnaryOperator;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import static org.pcub.core.common.PCUBCore.logger;
-// TODO: 分离接口
-public class PotionColorMapping {
-    public static Pattern CMD_POTION_PATTERN = Pattern.compile("^pcubc_potion_color_([0-9]+)$");
 
-    public static int getCloserPotionColor(int potionColor, Int2ObjectOpenHashMap<?> potionMappings) {
+public class PotionColorMapping implements ItemSimilarityHandler {
+    public static String CMD_POTION_PREFIX = "pcubc_potion_color_";
+    public static Pattern CMD_POTION_PATTERN = Pattern.compile("^%s([0-9]+)$".formatted(CMD_POTION_PREFIX));
+
+    public static BiFunction<ItemPredicateContext, DataComponents, ItemSimilarityHandler> SIMILARITY_HANDLER_SUPPLIER = PotionColorMapping::new;
+
+    public static int getCloserPotionColor(int potionColor, IntSet possibleColors) {
         // 匹配相同药水颜色
-        if (potionMappings.containsKey(potionColor)) {
+        if (possibleColors.contains(potionColor)) {
             logger().debug("匹配药水颜色 相同");
             return potionColor;
         }
@@ -35,7 +45,7 @@ public class PotionColorMapping {
         double potionPercentB = 2 - (double) potionB / maxValue;
         // 重新遍历
         double colorDistanceClose = -1;
-        for (int option : potionMappings.keySet()) {
+        for (int option : possibleColors) {
             // 当前项的颜色
             int optionR = option / 65536;
             int optionG = option / 256 % 256;
@@ -52,36 +62,76 @@ public class PotionColorMapping {
         return newValue;
     }
 
-    public static Object2IntOpenHashMap<CustomModelDataPredicate.StringPredicate> predicate2Color = new Object2IntOpenHashMap<>(); // <color, predicate>
+    public static Object2IntOpenHashMap<MinecraftPredicate<?>> PREDICATE_TO_COLOR = new Object2IntOpenHashMap<>(); // <color, predicate>
     static {
-        predicate2Color.defaultReturnValue(-1);
+        PREDICATE_TO_COLOR.defaultReturnValue(-1);
     }
+
+    public static void recordPredicate(MinecraftPredicate<? super ItemPredicateContext> predicate, int color, String holder) {
+        PREDICATE_TO_COLOR.put(predicate, color);
+        AdvancedItemTranslator.recordPredicate(predicate, SIMILARITY_HANDLER_SUPPLIER, holder);
+    }
+
+    public static boolean recordPredicate(MinecraftPredicate<? super ItemPredicateContext> predicate) {
+        if (!(predicate instanceof CustomModelDataPredicate.StringPredicate stringPredicate)) {
+            return false;
+        }
+        String holder = stringPredicate.string();
+        if (holder == null || stringPredicate.negated()) {
+            return false;
+        }
+        Matcher matcher = PotionColorMapping.CMD_POTION_PATTERN.matcher(holder);
+        if (!matcher.find()) {
+            return false;
+        }
+        recordPredicate(predicate, Integer.parseInt(matcher.group(1)), holder);
+        return true;
+    }
+
+    public static MinecraftPredicate<? super ItemPredicateContext> createPredicate(int color, UnaryOperator<MinecraftPredicate<? super ItemPredicateContext>> compound) {
+        String holder = CMD_POTION_PREFIX + color;
+        PCUBItemHolderPredicate holderPredicate = new PCUBItemHolderPredicate(holder);
+        MinecraftPredicate<? super ItemPredicateContext> predicate = compound == null ? holderPredicate : compound.apply(holderPredicate);
+        recordPredicate(predicate, color, holder);
+        return predicate;
+    }
+
+    public static MinecraftPredicate<? super ItemPredicateContext> createPredicate(int color) {
+        return createPredicate(color, null);
+    }
+
+
+
+
+
 
     // 当前物品数据
     private int potionColor = -1;
     // 距离匹配用
-    private final Int2ObjectOpenHashMap<CustomModelDataPredicate.StringPredicate> potionMappings = new Int2ObjectOpenHashMap<>(); // <color, predicate>
+    private final Int2ObjectOpenHashMap<MinecraftPredicate<?>> potionMappings = new Int2ObjectOpenHashMap<>(); // <color, predicate>
 
-    public CustomModelDataPredicate.StringPredicate getClosestPredicate() {
+    @Override
+    public MinecraftPredicate<?> getClosestPredicate() {
         // logger().debug("已候选 %s 个药水颜色条件".formatted(potionMappings.size()));
         if (potionColor == -1 || potionMappings.isEmpty()) {
             return null;
         }
-        int key = getCloserPotionColor(potionColor, potionMappings);
+        int key = getCloserPotionColor(potionColor, potionMappings.keySet());
         if (key == -1) {
             return null;
         }
         return potionMappings.get(key);
     }
 
-    public void recordPredicate(CustomModelDataPredicate.StringPredicate predicate) {
-        int color = predicate2Color.getInt(predicate);
+    @Override
+    public void selectPredicate(MinecraftPredicate<?> predicate) {
+        int color = PREDICATE_TO_COLOR.getInt(predicate);
         if (color != -1) {
             potionMappings.computeIfAbsent(color, x -> predicate);
         }
     }
 
-    public PotionColorMapping(DataComponents components) {
+    public PotionColorMapping(ItemPredicateContext geyserContext, DataComponents components) {
         PotionContents potionContents = components.get(DataComponentTypes.POTION_CONTENTS);
         if (potionContents != null) {
             potionColor = potionContents.getCustomColor();

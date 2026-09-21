@@ -1,10 +1,6 @@
 package org.pcub.core.geyser.translator;
 
 import com.google.common.collect.SortedSetMultimap;
-import it.unimi.dsi.fastutil.ints.IntArrayList;
-import it.unimi.dsi.fastutil.ints.IntList;
-import it.unimi.dsi.fastutil.objects.Object2BooleanMap;
-import it.unimi.dsi.fastutil.objects.Object2BooleanOpenHashMap;
 import net.kyori.adventure.key.Key;
 import org.checkerframework.checker.nullness.qual.NonNull;
 import org.geysermc.geyser.api.predicate.MinecraftPredicate;
@@ -22,26 +18,50 @@ import org.geysermc.mcprotocollib.protocol.data.game.item.ItemStack;
 import org.geysermc.mcprotocollib.protocol.data.game.item.component.*;
 import org.jspecify.annotations.Nullable;
 import org.pcub.core.geyser.cache.ItemHashCache;
-import org.pcub.core.geyser.item.PCUBItemPredicateContext;
-import org.pcub.core.geyser.item.PotionColorMapping;
+import org.pcub.core.geyser.item.ItemSimilarityHandler;
 
 import java.util.*;
-import java.util.function.Function;
+import java.util.function.BiFunction;
 
 import static org.pcub.core.common.PCUBCore.logger;
 
 public class AdvancedItemTranslator {
     public static String CMD_ADDED_TAG = "pcubc_added";
 
-    public static Map<CustomModelDataPredicate.StringPredicate, Function<DataComponents, PotionColorMapping>> advancePredicateHandlers = new HashMap<>();
+    public static Map<MinecraftPredicate<?>, String> SPECIAL_PREDICATE_HOLDERS = new HashMap<>();
+    // 特殊谓词，预先构造
+    // public static Map<MinecraftPredicate<?>, Predicate<DataComponents>> SPECIAL_PREDICATES = new HashMap<>();
+    // 提供相似度匹配处理器，每个物品实例对应一个处理器实例
+    public static Map<MinecraftPredicate<?>, BiFunction<ItemPredicateContext, DataComponents, ItemSimilarityHandler>> SIMILARITY_HANDLER_SUPPLIERS = new HashMap<>();
 
-    public static boolean stringPredicateEquals(CustomModelDataPredicate.@NonNull StringPredicate p1, CustomModelDataPredicate.@NonNull StringPredicate p2) {
-        if (p1 == p2) {
-            return true;
-        }
-        String string1 = p1.string();
-        return (string1 != null && string1.equals(p2.string()) || p1.index() == p2.index());
+    public static void recordPredicate(MinecraftPredicate<? super ItemPredicateContext> predicate,
+                                BiFunction<ItemPredicateContext, DataComponents, ItemSimilarityHandler> handlerSupplier, String holder) {
+        SIMILARITY_HANDLER_SUPPLIERS.put(predicate, handlerSupplier);
+        SPECIAL_PREDICATE_HOLDERS.put(predicate, holder);
     }
+
+
+
+    public static CustomModelData applyNewCMD(CustomModelData origin, Collection<? extends MinecraftPredicate<?>> closestPredicates) {
+        List<String> cmdStrings = new ArrayList<>(origin != null ? origin.strings() :
+            List.of(CMD_ADDED_TAG)); // 新建标记
+        for (var predicate : closestPredicates) {
+            if (predicate instanceof CustomModelDataPredicate.StringPredicate stringPredicate) {
+                cmdStrings.add(stringPredicate.index(), stringPredicate.string());
+            } else {
+                cmdStrings.add(SPECIAL_PREDICATE_HOLDERS.get(predicate));
+            }
+        }
+        return (origin != null ? origin.toBuilder() :
+                // 新建组件
+                CustomModelData.builder().colors(List.of()).flags(List.of()).floats(List.of())
+        ).strings(cmdStrings).build();
+    }
+
+
+
+
+
 
     /**
      * @param javaItem 原始物品堆叠
@@ -105,8 +125,8 @@ public class AdvancedItemTranslator {
         // 检查非法标签
         if (cmd != null) {
             boolean includeTags = cmd.strings().contains(CMD_ADDED_TAG);
-            for (var advancePredicate : advancePredicateHandlers.keySet()) {
-                if (cmd.strings().contains(advancePredicate.string())) {
+            for (var holder : SPECIAL_PREDICATE_HOLDERS.values()) {
+                if (cmd.strings().contains(holder)) {
                     includeTags = true;
                     break;
                 }
@@ -132,109 +152,112 @@ public class AdvancedItemTranslator {
             return false;
         }
 
-        ItemPredicateContext geyserContext = GeyserItemPredicateContext.create(session, amount, fullComponents);
-        PCUBItemPredicateContext context = new PCUBItemPredicateContext(geyserContext, fullComponents);
+        ItemPredicateContext geyserContext = null;
         // 已经实例化的处理器，伴随此次映射检查，下一次检查会重新创建
-        Map<Function<DataComponents, PotionColorMapping>, PotionColorMapping> loadedHandlers = new HashMap<>();
+        Map<BiFunction<ItemPredicateContext, DataComponents, ItemSimilarityHandler>, ItemSimilarityHandler> loadedHandlers = new HashMap<>();
 
-        Object2BooleanMap<MinecraftPredicate<?>> calculatedPredicates = new Object2BooleanOpenHashMap<>();
         for (GeyserCustomMappingData customMapping : customMappings) {
-            List<MinecraftPredicate<? super ItemPredicateContext>> predicates = customMapping.definition().predicates();
-
-            IntList offsetIndexes = new IntArrayList(); // 用于后期实现多个特殊条件
             boolean needsOnlyOneMatch = customMapping.definition().predicateStrategy() == PredicateStrategy.OR;
             boolean allMatch = true;
 
-            boolean hasAdvancePredicate = false;
-            // 临时区
-            Map<PotionColorMapping, CustomModelDataPredicate.StringPredicate> stagedAdvancedPredicates = needsOnlyOneMatch ? null : new HashMap<>();
+            Map<ItemSimilarityHandler, MinecraftPredicate<? super ItemPredicateContext>> similarityPredicates = null;
 
-            List<MinecraftPredicate<? super ItemPredicateContext>> nativePredicates = needsOnlyOneMatch ? null : new ArrayList<>();
-            for (MinecraftPredicate<? super ItemPredicateContext> predicate : predicates) {
+            List<MinecraftPredicate<? super ItemPredicateContext>> predicates = customMapping.definition().predicates();
+
+            for (var predicate : predicates) {
                 // 特殊条件收集
-                if (predicate instanceof CustomModelDataPredicate.StringPredicate stringPredicate) {
-                    var handler = advancePredicateHandlers.get(stringPredicate);
-                    if (handler != null) {
-                        if (!needsOnlyOneMatch && stringPredicate.index() > (cmd != null ? cmd.strings().size() : 0)){
-                            // 与条件 超过物品现有 CMD 列表大小，直接跳过此映射
-                            allMatch = false; // 若已存入临时区，则取消
-                            break;
-                        }
+                var similarityHandlerSupplier = SIMILARITY_HANDLER_SUPPLIERS.get(predicate);
+                if (similarityHandlerSupplier != null) {
+                    // 相似度匹配
 
-                        // 创建或获取当前物品对应实例
-                        var handlerInstance = loadedHandlers.computeIfAbsent(handler, x -> handler.apply(fullComponents));
-
-                        // 临时区仅与条件可用
-                        CustomModelDataPredicate.StringPredicate stagedAdvancedPredicate = needsOnlyOneMatch ? null :
-                                stagedAdvancedPredicates.get(handlerInstance);
-                        if (stagedAdvancedPredicate != null) {
-                            if (stringPredicateEquals(stagedAdvancedPredicate, stringPredicate)) {
-                                continue; // 相同条件都能满足
-                            }
-                            // 不能匹配相同处理器的多个不同条件，直接跳过此映射
-                            allMatch = false; // 若已存入临时区，则取消
-                            break;
-                        }
-
+                    // 首先排除固定索引值超出物品现有 CMD 列表大小的的文本谓词（专用谓词不需要索引）
+                    if (predicate instanceof CustomModelDataPredicate.StringPredicate stringPredicate &&
+                            stringPredicate.index() > (cmd != null ? cmd.strings().size() : 0)) {
                         if (needsOnlyOneMatch) {
-                            // 或条件 直接添加
-                            handlerInstance.recordPredicate(stringPredicate);
+                            // 或条件 跳过此谓词
+                            continue;
                         } else {
-                            // 与条件 存入临时区，所有条件通过后才添加
-                            stagedAdvancedPredicates.put(handlerInstance, stringPredicate);
-                            hasAdvancePredicate = true;
+                            // 与条件 直接跳过此映射
+                            allMatch = false; // 若已存入临时区，则取消
+                            break;
                         }
+                    }
 
-                        offsetIndexes.add(stringPredicate.index());
-                        continue; // 特殊条件不进行原生检查
+                    // 创建或获取当前物品对应实例
+                    if (geyserContext == null) {
+                        geyserContext = GeyserItemPredicateContext.create(session, amount, fullComponents);
+                    }
+                    ItemPredicateContext finalGeyserContext = geyserContext;
+                    ItemSimilarityHandler similarityHandler = loadedHandlers.computeIfAbsent(similarityHandlerSupplier,
+                            x -> similarityHandlerSupplier.apply(finalGeyserContext, fullComponents));
+
+                    if (similarityPredicates == null) {
+                        similarityPredicates = new HashMap<>();
+                    }
+
+                    // 先暂存，稍后检查通过才添加
+                    // 如果一处理器具有多个匹配项，或条件只需匹配其一，与条件则完全不能匹配
+                    MinecraftPredicate<?> stagedPredicate = similarityPredicates.putIfAbsent(similarityHandler, predicate);
+                    if (!needsOnlyOneMatch && stagedPredicate != null) {
+                        // 与条件 已有匹配项，直接跳过此映射（提前检测以减少开销，后续检查全部谓词时也会跳过）
+                        allMatch = false; // 若已存入临时区，则取消
+                        break;
                     }
                 }
-                if (!needsOnlyOneMatch) {
-                    nativePredicates.add(predicate);
-                }
+                // TODO: 特殊谓词匹配
             }
 
-            if (!allMatch || !hasAdvancePredicate) {
+            if (!allMatch || similarityPredicates == null) {
                 continue;
             }
 
-            // 原生条件检查
-            context.sortAndSetOffsetIndexes(offsetIndexes);
-            for (var predicate : nativePredicates) {
-                if (!calculatedPredicates.computeIfAbsent(predicate, x -> predicate.test(context))) {
-                    allMatch = false; // 与条件其一不满足，直接跳过此映射
-                    break;
+            DataComponents fakeFullComponents = fullComponents.clone();
+            fakeFullComponents.put(DataComponentTypes.CUSTOM_MODEL_DATA, applyNewCMD(cmd, similarityPredicates.values()));
+            ItemPredicateContext fakeContext = GeyserItemPredicateContext.create(session, amount, fakeFullComponents);
+
+            // 与条件 需检查全部谓词
+            if (!needsOnlyOneMatch) {
+                for (var predicate : predicates) {
+                    if (!predicate.test(fakeContext)) {
+                        // 与条件 其一不满足，直接跳过此映射
+                        allMatch = false;
+                        break;
+                    }
                 }
             }
 
             if (allMatch) {
-                for (var handlerInstance : stagedAdvancedPredicates.keySet()) {
-                    handlerInstance.recordPredicate(stagedAdvancedPredicates.get(handlerInstance));
-                }
+                similarityPredicates.forEach((handlerInstance, predicate) -> {
+                    // 单个相似度匹配也可能会和其它条件组合，故或条件需在此检查
+                    if (!needsOnlyOneMatch || predicate.test(fakeContext)) {
+                        handlerInstance.selectPredicate(predicate);
+                    }
+                });
             }
         }
 
-        CustomModelDataPredicate.StringPredicate result = null;
-        // TODO: 实现有效的多个特殊映射排序
-        for (var handler : loadedHandlers.keySet()) {
-            result = loadedHandlers.get(handler).getClosestPredicate();
+        // TODO: 实现有效的多个特殊映射排序，并把映射项顺序列入
+        Set<MinecraftPredicate<?>> closestPredicates = null;
+        for (var handler : loadedHandlers.values()) {
+            MinecraftPredicate<?> predicate = handler.getClosestPredicate();
+            if (predicate != null) {
+                if (closestPredicates == null) {
+                    closestPredicates = new HashSet<>();
+                }
+                closestPredicates.add(predicate);
+            }
         }
 
         // 根据遍历得到的最近值，应用组件数据
-        if (loadedHandlers.isEmpty() || result == null) {
+        if (closestPredicates == null) {
             return false;
         }
-        List<String> cmdStrings = new ArrayList<>(cmd != null ? cmd.strings() :
-                List.of(CMD_ADDED_TAG)); // 新建标记
-        cmdStrings.add(result.index(), result.string());
-        CustomModelData newCMD = (cmd != null ? cmd.toBuilder() :
-                // 新建组件
-                CustomModelData.builder().colors(List.of()).flags(List.of()).floats(List.of())
-        ).strings(cmdStrings).build();
+        CustomModelData newCMD = applyNewCMD(cmd, closestPredicates);
         components.put(DataComponentTypes.CUSTOM_MODEL_DATA, newCMD);
         // 将原始组件转为 hash 供服务器物品校验
         ItemHashCache.INSTANCE.put(session, DataComponentTypes.CUSTOM_MODEL_DATA, newCMD, cmd);
 
+        logger().debug(() -> Arrays.toString(newCMD.strings().toArray()));
         return true;
     }
 
@@ -295,12 +318,11 @@ public class AdvancedItemTranslator {
             logger().debug("移除增加的 CMD 组件");
             return null;
         }
-        for (var advancePredicate : advancePredicateHandlers.keySet()) {
-            String predicateStr = advancePredicate.string();
-            if (cmd.strings().contains(predicateStr)) {
+        for (var holder : SPECIAL_PREDICATE_HOLDERS.values()) {
+            if (cmd.strings().contains(holder)) {
                 logger().debug("恢复原有 CMD 组件");
                 List<String> strings = new ArrayList<>(cmd.strings());
-                strings.remove(predicateStr);
+                strings.remove(holder);
                 return cmd.toBuilder().strings(strings).build();
             }
         }
