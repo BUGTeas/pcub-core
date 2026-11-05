@@ -20,8 +20,8 @@ import java.nio.file.Path;
 import static org.pcub.core.common.PCUBCore.logger;
 
 public class GeyserHandler implements EventRegistrar {
-    public static final String EXPECT_GEYSER_VER = "2.11.2-b1232 (git-master-32e7fe1)";
-    public static final int[] EXPECT_GEYSER_API_VER = {2,11,2};
+    public static final String EXPECT_GEYSER_VER = "2.11.2-b1289 (git-master-3a1ebeb)";
+    public static final int[] EXPECT_GEYSER_API_VER = {2,12,1};
 
     // 供非 Geyser 扩展使用
     public static void subscribeInit(Runnable callback) {

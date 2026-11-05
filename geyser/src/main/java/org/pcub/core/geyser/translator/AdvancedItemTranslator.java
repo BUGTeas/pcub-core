@@ -13,7 +13,7 @@ import org.geysermc.geyser.item.GeyserCustomMappingData;
 import org.geysermc.geyser.item.custom.GeyserItemPredicateContext;
 import org.geysermc.geyser.item.hashing.DataComponentHashers;
 import org.geysermc.geyser.item.type.Item;
-import org.geysermc.geyser.registry.Registries;
+import org.geysermc.geyser.registry.java.BuiltInJavaRegistries;
 import org.geysermc.geyser.session.GeyserSession;
 import org.geysermc.mcprotocollib.protocol.data.game.item.ItemStack;
 import org.geysermc.mcprotocollib.protocol.data.game.item.component.*;
@@ -111,7 +111,7 @@ public class AdvancedItemTranslator {
             List<ItemStack> bundleContents = components.get(DataComponentTypes.BUNDLE_CONTENTS);
             if (bundleContents != null) {
                 boolean modded = false;
-                int originHash = DataComponentHashers.hash(session.getRegistryCache(), DataComponentTypes.BUNDLE_CONTENTS, bundleContents).asInt();
+                int originHash = DataComponentHashers.hash(session.javaRegistries(), DataComponentTypes.BUNDLE_CONTENTS, bundleContents).asInt();
                 for (ItemStack bundleItem : bundleContents) {
                     if (apply(session, bundleItem, true)) {
                         modded = true;
@@ -120,7 +120,7 @@ public class AdvancedItemTranslator {
                 if (modded) {
                     logger().debug("收纳袋校验缓存");
                     ItemHashCache.INSTANCE.put(
-                            DataComponentHashers.hash(session.getRegistryCache(), DataComponentTypes.BUNDLE_CONTENTS, bundleContents).asInt(),
+                            DataComponentHashers.hash(session.javaRegistries(), DataComponentTypes.BUNDLE_CONTENTS, bundleContents).asInt(),
                             originHash);
                 }
             }
@@ -148,7 +148,7 @@ public class AdvancedItemTranslator {
         }
 
         // 获取完整组件及模型映射列表
-        DataComponents fullComponents = Registries.JAVA_ITEMS.get().get(javaId).gatherComponents(session.getComponentCache(), components);
+        DataComponents fullComponents = BuiltInJavaRegistries.ITEM.getOrThrow(javaId).gatherComponents(session.getComponentCache(), components);
         Key itemModel = fullComponents.get(DataComponentTypes.ITEM_MODEL);
         if (itemModel == null) {
             return false;
@@ -363,13 +363,8 @@ public class AdvancedItemTranslator {
     }
 
     public static String getItemName(int id) {
-        List<Item> itemList = Registries.JAVA_ITEMS.get();
-        if (id > 0 && id < itemList.size()) {
-            Item item = itemList.get(id);
-            if (item != null) {
-                return item.javaIdentifier().replaceAll("^minecraft:", "mc:") + "(" + id + ")";
-            }
-        }
-        return "?(" + id + ")";
+        Optional<Item> itemOptional = BuiltInJavaRegistries.ITEM.get(id);
+        return itemOptional.map(entry -> entry.javaKey().asMinimalString()).orElse("?") +
+                "(" + id + ")";
     }
 }

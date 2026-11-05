@@ -123,7 +123,7 @@ public class ItemHashCache {
     }
 
     public <T> void put(GeyserSession session, MinecraftHasher<T> hasher, T applied, T origin) {
-        MinecraftHashEncoder encoder = new MinecraftHashEncoder(session.getRegistryCache());
+        MinecraftHashEncoder encoder = new MinecraftHashEncoder(session.javaRegistries());
         put(hasher.hash(applied, encoder).asInt(),
                 () -> origin == null ? 0 : hasher.hash(origin, encoder).asInt());
     }
