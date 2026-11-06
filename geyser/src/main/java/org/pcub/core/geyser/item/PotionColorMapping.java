@@ -15,6 +15,9 @@ import org.geysermc.mcprotocollib.protocol.data.game.item.component.PotionConten
 import org.pcub.core.common.PCUBColor;
 import org.pcub.core.geyser.translator.AdvancedItemTranslator;
 
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
 import java.util.function.BiFunction;
 import java.util.function.UnaryOperator;
 import java.util.regex.Matcher;
@@ -39,9 +42,14 @@ public class PotionColorMapping implements ItemSimilarityHandler {
             return customColor;
         }
         if (!potionContents.getCustomEffects().isEmpty()) {
+            Potion vanilla = Potion.getByJavaId(potionContents.getPotionId());
+            List<MobEffectInstance> effects = vanilla == null ? potionContents.getCustomEffects() : new ArrayList<>(Arrays.asList(vanilla.getJavaEffects()));
+            if (vanilla != null) {
+                effects.addAll(potionContents.getCustomEffects());
+            }
             int totalR = 0, totalG = 0, totalB = 0;
             int total = 0;
-            for (MobEffectInstance effect : potionContents.getCustomEffects()) {
+            for (MobEffectInstance effect : effects) {
                 int amplifier = effect.getDetails().getAmplifier() + 1;
                 total += amplifier;
                 PCUBColor effectColor = PCUBColor.fromInt(EffectType.fromJavaEffect(effect.getEffect()).getColor());
