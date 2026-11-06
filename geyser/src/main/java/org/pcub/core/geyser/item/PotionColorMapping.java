@@ -7,9 +7,12 @@ import org.checkerframework.checker.nullness.qual.Nullable;
 import org.geysermc.geyser.api.predicate.MinecraftPredicate;
 import org.geysermc.geyser.api.predicate.context.item.ItemPredicateContext;
 import org.geysermc.geyser.api.predicate.item.CustomModelDataPredicate;
+import org.geysermc.geyser.level.EffectType;
 import org.geysermc.mcprotocollib.protocol.data.game.item.component.DataComponentTypes;
 import org.geysermc.mcprotocollib.protocol.data.game.item.component.DataComponents;
+import org.geysermc.mcprotocollib.protocol.data.game.item.component.MobEffectInstance;
 import org.geysermc.mcprotocollib.protocol.data.game.item.component.PotionContents;
+import org.pcub.core.common.PCUBColor;
 import org.pcub.core.geyser.translator.AdvancedItemTranslator;
 
 import java.util.function.BiFunction;
@@ -25,17 +28,33 @@ public class PotionColorMapping implements ItemSimilarityHandler {
 
     public static BiFunction<ItemPredicateContext, DataComponents, @Nullable ItemSimilarityHandler> SIMILARITY_HANDLER_SUPPLIER = (geyserContext, components) -> {
         PotionContents potionContents = components.get(DataComponentTypes.POTION_CONTENTS);
-        if (potionContents == null) {
-            return null;
-        }
-        int potionColor = potionContents.getCustomColor();
-        if (potionColor == -1) {
-            // TODO: 自动颜色
-            return null;
-        }
-        logger().debug("药水颜色: " + potionColor);
-        return new PotionColorMapping(potionColor);
+        int potionColor = potionContents == null ? -1 : getPotionColor(potionContents);
+        return potionColor == -1 ? null : new PotionColorMapping(potionColor);
     };
+
+    public static int getPotionColor(PotionContents potionContents) {
+        int customColor = potionContents.getCustomColor();
+        if (customColor != -1) {
+            logger().debug(() -> "药水颜色: 自定义 " + PCUBColor.fromInt(customColor));
+            return customColor;
+        }
+        if (!potionContents.getCustomEffects().isEmpty()) {
+            int totalR = 0, totalG = 0, totalB = 0;
+            int total = 0;
+            for (MobEffectInstance effect : potionContents.getCustomEffects()) {
+                int amplifier = effect.getDetails().getAmplifier() + 1;
+                total += amplifier;
+                PCUBColor effectColor = PCUBColor.fromInt(EffectType.fromJavaEffect(effect.getEffect()).getColor());
+                totalR += amplifier * effectColor.red();
+                totalG += amplifier * effectColor.green();
+                totalB += amplifier * effectColor.blue();
+            }
+            PCUBColor potionColor = new PCUBColor(totalR / total, totalG / total, totalB / total);
+            logger().debug("药水颜色: 混合 " + potionColor);
+            return potionColor.toInt();
+        }
+        return -1;
+    }
 
     public static int getCloserPotionColor(int potionColor, IntSet possibleColors) {
         // 匹配相同药水颜色
