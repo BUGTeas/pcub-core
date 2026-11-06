@@ -1,5 +1,5 @@
 plugins {
-    id("pcub.base-conventions")
+    id("pcub.product-conventions")
 }
 
 repositories {
@@ -20,8 +20,9 @@ repositories {
 dependencies {
     compileOnly("io.papermc.paper:paper-api:1.20.1-R0.1-SNAPSHOT")
 //    compileOnly("org.spigotmc:spigot-api:1.20.1-R0.1-SNAPSHOT")
-    compileOnly(project(":common"))
-    compileOnly(project(":bukkit:geyser"))
+
+    implementation(project(":common"))
+    implementation(project(":bukkit:geyser", "shadow"))
 }
 
 tasks {
@@ -40,6 +41,6 @@ tasks {
     shadowJar {
         outputs.upToDateWhen { false }
 
-        relocate("org.pcub.core.geyser", "org.pcub.core.bukkit.geyser")
+        relocate("org.pcub.core.geyser", "org.pcub.core.bukkit.relocate.geyser")
     }
 }

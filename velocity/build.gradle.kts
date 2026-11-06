@@ -1,5 +1,5 @@
 plugins {
-    id("pcub.base-conventions")
+    id("pcub.product-conventions")
 }
 
 repositories {
@@ -8,8 +8,8 @@ repositories {
 val geyserVersion = project.property("geyser-version") as String
 
 dependencies {
-    compileOnly(project(":common"))
-    compileOnly(project(":velocity:geyser"))
+    implementation(project(":common"))
+    implementation(project(":velocity:geyser", "shadow"))
 }
 
 tasks {
@@ -29,6 +29,6 @@ tasks {
     shadowJar {
         outputs.upToDateWhen { false }
 
-        relocate("org.pcub.core.geyser", "org.pcub.core.velocity.geyser")
+        relocate("org.pcub.core.geyser", "org.pcub.core.velocity.relocate.geyser")
     }
 }
