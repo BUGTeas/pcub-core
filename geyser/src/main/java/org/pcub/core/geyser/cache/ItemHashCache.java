@@ -25,8 +25,10 @@ import static org.pcub.core.common.PCUBCore.logger;
 
 public class ItemHashCache {
     public static ItemHashCache INSTANCE;
+    private final static int TO_REMOVE = 0;
+    private final static int NOTHING = -1;
     // <modded/added, original>
-    private Int2IntLinkedOpenHashMap cache;
+    private final Int2IntLinkedOpenHashMap cache;
 
 
 
@@ -35,25 +37,28 @@ public class ItemHashCache {
 
     public HashedStack getOrigin(@NonNull HashedStack hashedStack) {
         // 从缓存获取原始
-        Integer hashedBundleCont = hashedStack.addedComponents().get(DataComponentTypes.BUNDLE_CONTENTS);
-        int originBundleCont = hashedBundleCont == null ? -1 : getOrigin(hashedBundleCont);
-        Integer hashedCMD = hashedStack.addedComponents().get(DataComponentTypes.CUSTOM_MODEL_DATA);
-        int originCMD = hashedCMD == null ? -1 : getOrigin(hashedCMD);
+        Map<DataComponentType<?>, Integer> addedComponents = hashedStack.addedComponents();
+        Integer hashedBundleCont = addedComponents.get(DataComponentTypes.BUNDLE_CONTENTS);
+        int originBundleCont = hashedBundleCont == null ? NOTHING : getOrigin(hashedBundleCont);
+        Integer hashedCMD = addedComponents.get(DataComponentTypes.CUSTOM_MODEL_DATA);
+        int originCMD = hashedCMD == null ? NOTHING : getOrigin(hashedCMD);
 
-        if (originBundleCont == -1 && originCMD == -1) {
+        if (originBundleCont == NOTHING && originCMD == NOTHING) {
             return null;
         }
 
         logger().debug("从缓存恢复组件校验值");
-        Map<DataComponentType<?>, Integer> newAddedComp = new HashMap<>(hashedStack.addedComponents());
-        if (originBundleCont != -1) {
+        Map<DataComponentType<?>, Integer> newAddedComp = new HashMap<>(addedComponents);
+        if (originBundleCont != NOTHING) {
             newAddedComp.put(DataComponentTypes.BUNDLE_CONTENTS, originBundleCont);
         }
-        if (originCMD == 0) {
+
+        if (originCMD == TO_REMOVE) {
             newAddedComp.remove(DataComponentTypes.CUSTOM_MODEL_DATA);
-        } else if (originCMD != -1) {
+        } else if (originCMD != NOTHING) {
             newAddedComp.put(DataComponentTypes.CUSTOM_MODEL_DATA, originCMD);
         }
+
         return new HashedStack(hashedStack.id(), hashedStack.count(), newAddedComp, hashedStack.removedComponents());
     }
 
@@ -69,8 +74,8 @@ public class ItemHashCache {
 
 
     /**
-     * 获取物品中，被处理过的组件的原始数据，并将其hash缓存
-     * @param appliedItem 已经处理过的物品
+     * 获取物品中，被处理过的组件的原始数据，并缓存其校验值
+     * @param appliedItem 处理后的物品
      */
     public void put(GeyserSession session, @NonNull GeyserItemStack appliedItem) {
         if (appliedItem.getComponents() != null) {
@@ -79,8 +84,8 @@ public class ItemHashCache {
     }
 
     /**
-     * 获取物品中，被处理过的组件的原始数据，并将其hash缓存
-     * @param appliedItem 已经处理过的物品
+     * 获取物品中，被处理过的组件的原始数据，并缓存其校验值
+     * @param appliedItem 处理后的物品
      */
     public void put(GeyserSession session, @NonNull ItemStack appliedItem) {
         if (appliedItem.getDataComponentsPatch() != null) {
@@ -89,8 +94,8 @@ public class ItemHashCache {
     }
 
     /**
-     * 获取组件集中，被处理过的组件的原始数据，并将其hash缓存
-     * @param appliedComponents 已经处理过的组件集
+     * 获取组件集当中，被处理过的组件的原始数据，并缓存其校验值
+     * @param appliedComponents 处理后的组件集
      */
     public void put(GeyserSession session, @NonNull DataComponents appliedComponents) {
         List<ItemStack> bundleContents = appliedComponents.get(DataComponentTypes.BUNDLE_CONTENTS);
@@ -114,25 +119,30 @@ public class ItemHashCache {
 
 
     /**
-     * @param applied 已经处理过的数据
-     * @param origin 原始数据 (为空则解析为 0)
-     * @return 原有或新解析的原始值
+     * @param applied 处理后的组件
+     * @param origin 原始组件 (为空则表示新建，还原时删除)
+     * @return 处理后的组件的校验值
      */
-    public <T> void put(GeyserSession session, DataComponentType<T> componentType, T applied, T origin) {
-        put(session, DataComponentHashers.hasher(componentType), applied, origin);
+    public <T> int put(GeyserSession session, DataComponentType<T> componentType, T applied, T origin) {
+        return put(session, DataComponentHashers.hasher(componentType), applied, origin);
     }
 
-    public <T> void put(GeyserSession session, MinecraftHasher<T> hasher, T applied, T origin) {
+    public <T> int put(GeyserSession session, MinecraftHasher<T> hasher, T applied, T origin) {
         MinecraftHashEncoder encoder = new MinecraftHashEncoder(session.javaRegistries());
-        put(hasher.hash(applied, encoder).asInt(),
-                () -> origin == null ? 0 : hasher.hash(origin, encoder).asInt());
+        int appliedHash = hasher.hash(applied, encoder).asInt();
+        if (origin == null) {
+            put(appliedHash, 0);
+        } else {
+            computeIfAbsent(appliedHash, () -> hasher.hash(origin, encoder).asInt());
+        }
+        return appliedHash;
     }
 
     /**
-     * @param hashed 需要获取对应原始值的新值
-     * @param originIfNotExist 仅此前未存储过原始值时，才会解析
+     * @param hashed 处理后的组件的校验值
+     * @param originSupplier 解析原始组件的校验值，仅此前未存储时解析 (返回 0 则表示新建，还原时删除)
      */
-    public void put(int hashed, IntSupplier originIfNotExist) {
+    public void computeIfAbsent(int hashed, IntSupplier originSupplier) {
         boolean originFound;
         int origin;
         synchronized (cache) { // TODO: 实现线程安全的缓存读写
@@ -140,16 +150,16 @@ public class ItemHashCache {
             if (originFound = originGet != cache.defaultReturnValue()) {
                 cache.put(hashed, origin = originGet);
             } else {
-                cache.put(hashed, origin = originIfNotExist.getAsInt());
+                cache.put(hashed, origin = originSupplier.getAsInt());
                 checkSize();
             }
         }
-        logger().debug(() -> (originFound ? "排序 " : "新增 ") + hashed + " -> " + origin);
+        logger().debug(() -> (originFound ? "续期 " : "新增 ") + hashed + " -> " + (origin == 0 ? "删除" : origin));
     }
 
     /**
-     * @param hashed 需要获取对应原始值的新值
-     * @param origin 新值对应的原始值
+     * @param hashed 处理后的组件的校验值
+     * @param origin 原始组件的校验值 (为 0 则表示新建，还原时删除)
      */
     public void put(int hashed, int origin) {
         boolean originFound;
@@ -160,7 +170,7 @@ public class ItemHashCache {
                 checkSize();
             }
         }
-        logger().debug(() -> (originFound ? "排序 " : "新增 ") + hashed + " -> " + origin);
+        logger().debug(() -> (originFound ? "续期 " : "新增 ") + hashed + " -> " + (origin == 0 ? "删除" : origin));
     }
 
 
@@ -175,16 +185,12 @@ public class ItemHashCache {
         }
     }
 
-    public void reset() {
-        cache = new Int2IntLinkedOpenHashMap();
-        cache.defaultReturnValue(-1);
-    }
-
-    public static ItemHashCache mainInstance() {
-        return INSTANCE = new ItemHashCache();
+    public static void mainInstance() {
+        INSTANCE = new ItemHashCache();
     }
 
     public ItemHashCache() {
-        reset();
+        cache = new Int2IntLinkedOpenHashMap();
+        cache.defaultReturnValue(NOTHING);
     }
 }

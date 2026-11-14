@@ -38,7 +38,7 @@ public class AdvancedItemTranslator {
      * 将相似度匹配处理器和占位谓词（或所处的组合谓词）绑定
      * @param predicate 占位谓词，请确保其直接定义在映射项而非组合谓词（{@code and / or}）中，或连根将整个组合谓词传入（性能较差）
      * @param handlerSupplier 处理器实例构造器，每个物品实例构造一个处理器，当不满足需求（如所需组件不存在）时可传入 {@code null} 而不构造，以示此条件不成立
-     * @param holder 匹配成功时，会使用其伪装物品的 CMD。需要和占位谓词所检查的 CMD 字符串一致，以欺骗 Geyser 匹配映射
+     * @param holder 匹配成功时，将其用于伪装物品的 CMD。需要和占位谓词所检查的 CMD 字符串一致，以欺骗 Geyser 匹配映射
      */
     public static void recordSimilarityPredicate(MinecraftPredicate<? super ItemPredicateContext> predicate,
                                 BiFunction<ItemPredicateContext, DataComponents, @Nullable ItemSimilarityHandler> handlerSupplier, String holder) {
@@ -131,10 +131,12 @@ public class AdvancedItemTranslator {
         // 检查非法标签
         if (cmd != null) {
             boolean includeTags = cmd.strings().contains(CMD_ADDED_TAG);
-            for (var holder : SPECIAL_PREDICATE_HOLDERS.values()) {
-                if (cmd.strings().contains(holder)) {
-                    includeTags = true;
-                    break;
+            if (!includeTags) {
+                for (String holder : SPECIAL_PREDICATE_HOLDERS.values()) {
+                    if (cmd.strings().contains(holder)) {
+                        includeTags = true;
+                        break;
+                    }
                 }
             }
             if (includeTags) {
@@ -332,19 +334,22 @@ public class AdvancedItemTranslator {
 
     /// 需要删除则返回 null，需要更新则返回新对象，否则返回原对象
     public static @Nullable CustomModelData restoreFrom(@NonNull CustomModelData cmd) {
-        if (cmd.strings().contains(CMD_ADDED_TAG)) {
+        if (cmd.colors().isEmpty() && cmd.floats().isEmpty() && cmd.flags().isEmpty() &&cmd.strings().contains(CMD_ADDED_TAG)) {
             logger().debug("移除增加的 CMD 组件");
             return null;
         }
+        List<String> strings = null;
         for (var holder : SPECIAL_PREDICATE_HOLDERS.values()) {
             if (cmd.strings().contains(holder)) {
                 logger().debug("恢复原有 CMD 组件");
-                List<String> strings = new ArrayList<>(cmd.strings());
+                if (strings == null) {
+                    strings = new ArrayList<>(cmd.strings());
+                }
                 strings.remove(holder);
-                return cmd.toBuilder().strings(strings).build();
+                break;
             }
         }
-        return cmd;
+        return strings == null ? cmd : cmd.toBuilder().strings(strings).build();
     }
 
 
