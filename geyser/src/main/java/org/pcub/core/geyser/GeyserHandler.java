@@ -20,7 +20,7 @@ import java.nio.file.Path;
 import static org.pcub.core.common.PCUBCore.logger;
 
 public class GeyserHandler implements EventRegistrar {
-    public static final String EXPECT_GEYSER_VER = "2.11.2-b1289 (git-master-3a1ebeb)";
+    public static final String EXPECT_GEYSER_VER = "2.12.1-b1289 (git-master-3a1ebeb)";
     public static final int[] EXPECT_GEYSER_API_VER = {2,12,1};
 
     // 供非 Geyser 扩展使用
@@ -34,7 +34,7 @@ public class GeyserHandler implements EventRegistrar {
 
     public static void init(GeyserApi api) {
         ApiVersion geyserApiVer = api.geyserApiVersion();
-        logger().info("Geyser 版本: " + geyserApiVer.toString());
+        logger().info("Geyser 版本: " + geyserApiVer);
         logger().info("本组件适配版本: " + EXPECT_GEYSER_VER);
         if (EXPECT_GEYSER_API_VER[0] > geyserApiVer.human() ||
                 EXPECT_GEYSER_API_VER[1] > geyserApiVer.major() ||

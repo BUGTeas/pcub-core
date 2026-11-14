@@ -22,7 +22,8 @@ dependencies {
 //    compileOnly("org.spigotmc:spigot-api:1.20.1-R0.1-SNAPSHOT")
 
     implementation(project(":common"))
-    implementation(project(":bukkit:geyser", "shadow"))
+    compileOnly(project(":bukkit:geyser"))
+    runtimeOnly(project(":bukkit:geyser", "shadow"))
 }
 
 tasks {

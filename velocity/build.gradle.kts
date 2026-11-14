@@ -9,7 +9,8 @@ val geyserVersion = project.property("geyser-version") as String
 
 dependencies {
     implementation(project(":common"))
-    implementation(project(":velocity:geyser", "shadow"))
+    compileOnly(project(":velocity:geyser"))
+    runtimeOnly(project(":velocity:geyser", "shadow"))
 }
 
 tasks {
