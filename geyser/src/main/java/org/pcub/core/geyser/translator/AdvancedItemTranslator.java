@@ -1,6 +1,7 @@
 package org.pcub.core.geyser.translator;
 
 import com.google.common.collect.SortedSetMultimap;
+import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap;
 import it.unimi.dsi.fastutil.objects.Object2BooleanMap;
 import it.unimi.dsi.fastutil.objects.Object2BooleanOpenHashMap;
 import net.kyori.adventure.key.Key;
@@ -69,12 +70,37 @@ public class AdvancedItemTranslator {
     public static CustomModelData applyNewCMD(CustomModelData origin, Collection<? extends MinecraftPredicate<?>> targetHolders, boolean dyedHolder) {
         List<String> cmdStrings = new ArrayList<>(origin != null ? origin.strings() :
             List.of(CMD_ADDED_TAG)); // 新建标记
+        // 对于将普通文本谓词作为占位谓词，需要对应其索引，故需要优先插入
+        // 作为非代码使用高级映射的备用途径，不建议和正常占位谓词混用在同一映射项上，且可能会影响到优先级更高的普通谓词匹配（如果有）
+        Set<CustomModelDataPredicate.StringPredicate> indexedHolders = null;
         for (var holder : targetHolders) {
-            if (holder instanceof CustomModelDataPredicate.StringPredicate stringPredicate) {
-                // 对于将普通文本谓词作为占位谓词，需要对应其索引，故可能会影响到优先级更高的普通谓词匹配（如果有）
-                cmdStrings.add(stringPredicate.index(), stringPredicate.string());
-            } else {
-                cmdStrings.add(SPECIAL_PREDICATE_HOLDERS.get(holder));
+            if (holder instanceof CustomModelDataPredicate.StringPredicate indexedHolder) {
+                if (indexedHolders == null) {
+                    indexedHolders = new TreeSet<>(Comparator.comparingInt(CustomModelDataPredicate.StringPredicate::index));
+                }
+                indexedHolders.add(indexedHolder);
+            }
+        }
+        if (indexedHolders != null) {
+            int length = cmdStrings.size();
+            int lastInsert = -1;
+            for (var indexedHolder : indexedHolders) {
+                int index = indexedHolder.index();
+                // 排除重复索引或超出物品列表大小
+                if (length >= index && lastInsert != index) {
+                    lastInsert = index;
+                    cmdStrings.add(index, indexedHolder.string());
+                    length++;
+                }
+            }
+        }
+        // 最后插入无索引值的正常占位谓词
+        for (var holder : targetHolders) {
+            if (!(holder instanceof CustomModelDataPredicate.StringPredicate)) {
+                String holderString = SPECIAL_PREDICATE_HOLDERS.get(holder);
+                if (!cmdStrings.contains(holderString)) {
+                    cmdStrings.add(holderString);
+                }
             }
         }
         if (dyedHolder) {
@@ -222,19 +248,6 @@ public class AdvancedItemTranslator {
                     continue;
                 }
 
-                // 排除固定索引值超出物品现有 CMD 列表大小的文本谓词（占位谓词不需要索引）
-                if (predicate instanceof CustomModelDataPredicate.StringPredicate stringPredicate &&
-                        stringPredicate.index() > (cmd != null ? cmd.strings().size() : 0)) {
-                    if (needsOnlyOneMatch) {
-                        // 或条件 跳过此谓词
-                        continue;
-                    } else {
-                        // 与条件 直接跳过此映射
-                        targetHolders = null; // 若已存入临时区，则取消
-                        break;
-                    }
-                }
-
                 // 普通谓词数据
                 if (geyserContext == null) {
                     geyserContext = GeyserItemPredicateContext.create(session, amount, fullComponents);
@@ -269,7 +282,7 @@ public class AdvancedItemTranslator {
                     boolean staged = simPredicates.putIfAbsent(simHandler, predicate) != null;
                     // 如果一处理器在同一映射项中具有多个匹配项，或条件只需匹配其一，与条件则完全不能匹配
                     if (!needsOnlyOneMatch && staged) {
-                        // 与条件 已有匹配项，直接跳过此映射（提前检测以减少开销，后续检查全部谓词时也会跳过）
+                        // 与条件 已有匹配项，直接跳过此映射
                         targetHolders = null; // 若已存入临时区，则取消
                         break;
                     }
@@ -303,7 +316,7 @@ public class AdvancedItemTranslator {
                 continue;
             }
 
-            // 检查原版谓词
+            // 检查普通谓词
             DataComponents fakeFullComponents = fullComponents.clone();
             fakeFullComponents.put(DataComponentTypes.CUSTOM_MODEL_DATA, applyNewCMD(cmd, targetHolders, potionDyed));
             ItemPredicateContext fakeContext = GeyserItemPredicateContext.create(session, amount, fakeFullComponents);
