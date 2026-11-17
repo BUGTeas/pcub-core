@@ -1,9 +1,7 @@
-package org.pcub.core.geyser.item;
+package org.pcub.core.geyser.item.predicate;
 
 import org.geysermc.geyser.api.predicate.MinecraftPredicate;
 import org.geysermc.geyser.api.predicate.context.item.ItemPredicateContext;
-
-import static org.pcub.core.common.PCUBCore.logger;
 
 public record PCUBItemHolderPredicate(String holder) implements MinecraftPredicate<ItemPredicateContext> {
 
@@ -28,6 +26,6 @@ public record PCUBItemHolderPredicate(String holder) implements MinecraftPredica
 
     @Override
     public MinecraftPredicate<ItemPredicateContext> negate() {
-        throw new UnsupportedOperationException("特殊谓词不可反向");
+        throw new UnsupportedOperationException("占位谓词不可反向");
     }
 }

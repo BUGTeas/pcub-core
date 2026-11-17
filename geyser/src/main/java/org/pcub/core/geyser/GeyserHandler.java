@@ -63,7 +63,7 @@ public class GeyserHandler implements EventRegistrar {
         CustomItemRegistryModifier.forEach((protocolVersion, customMapping, modification) -> {
             CustomItemDefinition mappingDefinition = customMapping.definition();
             for (MinecraftPredicate<? super ItemPredicateContext> predicate : mappingDefinition.predicates()) {
-                PotionColorMapping.recordPredicate(predicate);
+                PotionColorMapping.recordHolder(predicate);
             }
             // modification.modifyComponents(comp -> comp.toBuilder()
             //         .putCompound("item_properties",

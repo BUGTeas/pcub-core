@@ -13,6 +13,7 @@ import org.geysermc.mcprotocollib.protocol.data.game.item.component.DataComponen
 import org.geysermc.mcprotocollib.protocol.data.game.item.component.MobEffectInstance;
 import org.geysermc.mcprotocollib.protocol.data.game.item.component.PotionContents;
 import org.pcub.core.common.PCUBColor;
+import org.pcub.core.geyser.item.predicate.PCUBItemHolderPredicate;
 import org.pcub.core.geyser.translator.AdvancedItemTranslator;
 
 import java.util.ArrayList;
@@ -102,42 +103,42 @@ public class PotionColorMapping implements ItemSimilarityHandler {
         return newValue;
     }
 
-    public static Object2IntOpenHashMap<MinecraftPredicate<?>> PREDICATE_TO_COLOR = new Object2IntOpenHashMap<>(); // <color, predicate>
+    public static Object2IntOpenHashMap<MinecraftPredicate<?>> HOLDER_TO_COLOR = new Object2IntOpenHashMap<>(); // <color, predicate>
     static {
-        PREDICATE_TO_COLOR.defaultReturnValue(-1);
+        HOLDER_TO_COLOR.defaultReturnValue(-1);
     }
 
-    public static void recordPredicate(MinecraftPredicate<? super ItemPredicateContext> predicate, int color, String holder) {
-        PREDICATE_TO_COLOR.put(predicate, color);
-        AdvancedItemTranslator.recordSimilarityPredicate(predicate, SIMILARITY_HANDLER_SUPPLIER, holder);
+    public static void recordHolder(int color, MinecraftPredicate<? super ItemPredicateContext> holder, String holderString) {
+        HOLDER_TO_COLOR.put(holder, color);
+        AdvancedItemTranslator.recordSimilarityPredicate(SIMILARITY_HANDLER_SUPPLIER, holder, holderString);
     }
 
-    public static boolean recordPredicate(MinecraftPredicate<? super ItemPredicateContext> predicate) {
-        if (!(predicate instanceof CustomModelDataPredicate.StringPredicate stringPredicate)) {
+    public static boolean recordHolder(MinecraftPredicate<? super ItemPredicateContext> holder) {
+        if (!(holder instanceof CustomModelDataPredicate.StringPredicate stringPredicate)) {
             return false;
         }
-        String holder = stringPredicate.string();
-        if (holder == null || stringPredicate.negated()) {
+        String holderString = stringPredicate.string();
+        if (holderString == null || stringPredicate.negated()) {
             return false;
         }
-        Matcher matcher = PotionColorMapping.CMD_POTION_PATTERN.matcher(holder);
+        Matcher matcher = PotionColorMapping.CMD_POTION_PATTERN.matcher(holderString);
         if (!matcher.find()) {
             return false;
         }
-        recordPredicate(predicate, Integer.parseInt(matcher.group(1)), holder);
+        recordHolder(Integer.parseInt(matcher.group(1)), holder, holderString);
         return true;
     }
 
-    public static MinecraftPredicate<? super ItemPredicateContext> createPredicate(int color, UnaryOperator<MinecraftPredicate<? super ItemPredicateContext>> compound) {
-        String holder = CMD_POTION_PREFIX + color;
-        PCUBItemHolderPredicate holderPredicate = new PCUBItemHolderPredicate(holder);
+    public static MinecraftPredicate<? super ItemPredicateContext> createHolder(int color, UnaryOperator<MinecraftPredicate<? super ItemPredicateContext>> compound) {
+        String holderString = CMD_POTION_PREFIX + color;
+        PCUBItemHolderPredicate holderPredicate = new PCUBItemHolderPredicate(holderString);
         MinecraftPredicate<? super ItemPredicateContext> predicate = compound == null ? holderPredicate : compound.apply(holderPredicate);
-        recordPredicate(predicate, color, holder);
+        recordHolder(color, predicate, holderString);
         return predicate;
     }
 
-    public static MinecraftPredicate<? super ItemPredicateContext> createPredicate(int color) {
-        return createPredicate(color, null);
+    public static MinecraftPredicate<? super ItemPredicateContext> createHolder(int color) {
+        return createHolder(color, null);
     }
 
 
@@ -148,10 +149,10 @@ public class PotionColorMapping implements ItemSimilarityHandler {
     // 当前物品数据
     private final int potionColor;
     // 距离匹配用
-    private final Int2ObjectOpenHashMap<MinecraftPredicate<?>> potionMappings = new Int2ObjectOpenHashMap<>(); // <color, predicate>
+    private final Int2ObjectOpenHashMap<List<MinecraftPredicate<? super ItemPredicateContext>>> potionMappings = new Int2ObjectOpenHashMap<>(); // <color, predicate>
 
     @Override
-    public MinecraftPredicate<?> getClosestPredicate() {
+    public List<MinecraftPredicate<? super ItemPredicateContext>> getClosestHolders() {
         // logger().debug("已候选 %s 个药水颜色条件".formatted(potionMappings.size()));
         if (potionColor == -1 || potionMappings.isEmpty()) {
             return null;
@@ -164,10 +165,10 @@ public class PotionColorMapping implements ItemSimilarityHandler {
     }
 
     @Override
-    public void selectPredicate(MinecraftPredicate<?> predicate) {
-        int color = PREDICATE_TO_COLOR.getInt(predicate);
+    public void selectMapping(MinecraftPredicate<? super ItemPredicateContext> predicate, List<MinecraftPredicate<? super ItemPredicateContext>> holderPredicates) {
+        int color = HOLDER_TO_COLOR.getInt(predicate);
         if (color != -1) {
-            potionMappings.computeIfAbsent(color, x -> predicate);
+            potionMappings.computeIfAbsent(color, x -> holderPredicates);
         }
     }
 
