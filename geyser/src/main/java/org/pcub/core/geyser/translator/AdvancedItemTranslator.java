@@ -31,6 +31,7 @@ import static org.pcub.core.common.PCUBCore.logger;
 
 public class AdvancedItemTranslator {
     public static final String CMD_ADDED_TAG = "pcubc_added";
+    public static final String CMD_DYED_TAG = "pcubc_dyed";
 
     public static Map<MinecraftPredicate<?>, String> SPECIAL_PREDICATE_HOLDERS = new HashMap<>();
     // 特殊谓词，预先构造
@@ -65,7 +66,7 @@ public class AdvancedItemTranslator {
 
 
 
-    public static CustomModelData applyNewCMD(CustomModelData origin, Collection<? extends MinecraftPredicate<?>> targetHolders) {
+    public static CustomModelData applyNewCMD(CustomModelData origin, Collection<? extends MinecraftPredicate<?>> targetHolders, boolean dyedHolder) {
         List<String> cmdStrings = new ArrayList<>(origin != null ? origin.strings() :
             List.of(CMD_ADDED_TAG)); // 新建标记
         for (var holder : targetHolders) {
@@ -75,6 +76,9 @@ public class AdvancedItemTranslator {
             } else {
                 cmdStrings.add(SPECIAL_PREDICATE_HOLDERS.get(holder));
             }
+        }
+        if (dyedHolder) {
+            cmdStrings.add(CMD_DYED_TAG);
         }
         return (origin != null ? origin.toBuilder() :
                 // 新建组件
@@ -148,7 +152,7 @@ public class AdvancedItemTranslator {
 
         // 检查非法标签
         if (cmd != null) {
-            boolean includeTags = cmd.strings().contains(CMD_ADDED_TAG);
+            boolean includeTags = cmd.strings().contains(CMD_ADDED_TAG) || cmd.strings().contains(CMD_DYED_TAG);
             if (!includeTags) {
                 for (String holder : SPECIAL_PREDICATE_HOLDERS.values()) {
                     if (cmd.strings().contains(holder)) {
@@ -176,6 +180,19 @@ public class AdvancedItemTranslator {
         SortedSet<GeyserCustomMappingData> customMappings = customItemDefinitions.get(itemModel);
         if (customMappings.isEmpty()) {
             return false;
+        }
+
+        // 药水颜色转染色
+        // 物品具有可选映射项（即使未匹配），且无现有染色时生效
+        boolean potionDyed = false;
+        if (!components.contains(DataComponentTypes.DYED_COLOR)) {
+            PotionContents potionContents = components.get(DataComponentTypes.POTION_CONTENTS);
+            int potionColor = potionContents == null ? -1 : PotionColorMapping.getPotionColor(potionContents);
+            if (potionColor != -1) {
+                components.put(DataComponentTypes.DYED_COLOR, potionColor);
+                // CMD 标记
+                potionDyed = true;
+            }
         }
 
         // 用于匹配谓词的物品数据参数（Geyser 部分）
@@ -288,7 +305,7 @@ public class AdvancedItemTranslator {
 
             // 检查原版谓词
             DataComponents fakeFullComponents = fullComponents.clone();
-            fakeFullComponents.put(DataComponentTypes.CUSTOM_MODEL_DATA, applyNewCMD(cmd, targetHolders));
+            fakeFullComponents.put(DataComponentTypes.CUSTOM_MODEL_DATA, applyNewCMD(cmd, targetHolders, potionDyed));
             ItemPredicateContext fakeContext = GeyserItemPredicateContext.create(session, amount, fakeFullComponents);
             boolean matched = !needsOnlyOneMatch;
             for (var predicate : predicates) {
@@ -334,13 +351,21 @@ public class AdvancedItemTranslator {
         }
 
         if (targetHolders == null) {
-            return false;
+            if (potionDyed) {
+                targetHolders = List.of();
+            } else {
+                return false;
+            }
         }
         // 根据遍历得到的最佳值，应用组件数据
-        CustomModelData newCMD = applyNewCMD(cmd, targetHolders);
+        CustomModelData newCMD = applyNewCMD(cmd, targetHolders, potionDyed);
         components.put(DataComponentTypes.CUSTOM_MODEL_DATA, newCMD);
         // 将原始组件转为 hash 供服务器物品校验
-        ItemHashCache.INSTANCE.put(session, DataComponentTypes.CUSTOM_MODEL_DATA, newCMD, cmd);
+        int hashedNewCMD = ItemHashCache.INSTANCE.put(session, DataComponentTypes.CUSTOM_MODEL_DATA, newCMD, cmd);
+        // 标记染色到 hash 缓存
+        if (potionDyed) {
+            ItemHashCache.INSTANCE.markDyed(hashedNewCMD);
+        }
 
         logger().debug(() -> "伪CMD" + Arrays.toString(newCMD.strings().toArray()));
         return true;
@@ -387,6 +412,9 @@ public class AdvancedItemTranslator {
                 logger().debug("恢复原有收纳袋组件");
             }
             if (newCMD != cmd) {
+                if (cmd.strings().contains(CMD_DYED_TAG)) {
+                    newComp.remove(DataComponentTypes.DYED_COLOR);
+                }
                 if (newCMD != null) {
                     newComp.put(DataComponentTypes.CUSTOM_MODEL_DATA, newCMD);
                 } else {
@@ -405,6 +433,11 @@ public class AdvancedItemTranslator {
             return null;
         }
         List<String> strings = null;
+        if (cmd.strings().contains(CMD_DYED_TAG)) {
+            logger().debug("移除增加的染色组件");
+            strings = new ArrayList<>(cmd.strings());
+            strings.remove(CMD_DYED_TAG);
+        }
         for (var holder : SPECIAL_PREDICATE_HOLDERS.values()) {
             if (cmd.strings().contains(holder)) {
                 logger().debug("恢复原有 CMD 组件");

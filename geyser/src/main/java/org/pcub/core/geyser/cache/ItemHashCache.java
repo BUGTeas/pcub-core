@@ -1,6 +1,7 @@
 package org.pcub.core.geyser.cache;
 
 import it.unimi.dsi.fastutil.ints.Int2IntLinkedOpenHashMap;
+import it.unimi.dsi.fastutil.ints.IntArrayList;
 import org.checkerframework.checker.nullness.qual.NonNull;
 import org.geysermc.geyser.inventory.GeyserItemStack;
 import org.geysermc.geyser.item.hashing.DataComponentHashers;
@@ -29,6 +30,7 @@ public class ItemHashCache {
     private final static int NOTHING = -1;
     // <modded/added, original>
     private final Int2IntLinkedOpenHashMap cache;
+    private final IntArrayList markDyedCache;
 
 
 
@@ -47,16 +49,30 @@ public class ItemHashCache {
             return null;
         }
 
-        logger().debug("从缓存恢复组件校验值");
         Map<DataComponentType<?>, Integer> newAddedComp = new HashMap<>(addedComponents);
         if (originBundleCont != NOTHING) {
             newAddedComp.put(DataComponentTypes.BUNDLE_CONTENTS, originBundleCont);
+            logger().debug("从缓存 恢复原有收纳袋组件");
         }
 
         if (originCMD == TO_REMOVE) {
             newAddedComp.remove(DataComponentTypes.CUSTOM_MODEL_DATA);
+            logger().debug("从缓存 移除增加的 CMD 组件");
         } else if (originCMD != NOTHING) {
             newAddedComp.put(DataComponentTypes.CUSTOM_MODEL_DATA, originCMD);
+            logger().debug("从缓存 恢复原有 CMD 组件");
+        }
+
+        // 移除增加的染色组件
+        if (originCMD != NOTHING) {
+            boolean haveNewDyed;
+            synchronized (markDyedCache) { // TODO: 实现线程安全的缓存读写
+                haveNewDyed = markDyedCache.contains(hashedCMD.intValue());
+            }
+            if (haveNewDyed) {
+                newAddedComp.remove(DataComponentTypes.DYED_COLOR);
+                logger().debug("从缓存 移除增加的染色组件");
+            }
         }
 
         return new HashedStack(hashedStack.id(), hashedStack.count(), newAddedComp, hashedStack.removedComponents());
@@ -109,7 +125,10 @@ public class ItemHashCache {
         CustomModelData cmd = appliedComponents.get(DataComponentTypes.CUSTOM_MODEL_DATA);
         CustomModelData originCMD = cmd != null ? AdvancedItemTranslator.restoreFrom(cmd) : null;
         if (originCMD != cmd) {
-            put(session, DataComponentTypes.CUSTOM_MODEL_DATA, cmd, originCMD);
+            int hashed = put(session, DataComponentTypes.CUSTOM_MODEL_DATA, cmd, originCMD);
+            if (cmd.strings().contains(AdvancedItemTranslator.CMD_DYED_TAG)) {
+                markDyed(hashed);
+            }
         }
     }
 
@@ -178,6 +197,31 @@ public class ItemHashCache {
 
 
 
+    /**
+     * 标记添加有自定义染色的物品的 CMD 组件，还原校验值时会删除移除对应物品的染色组件
+     * @param hashed 处理后的 CMD 组件的校验值
+     */
+    public void markDyed(int hashed) {
+        boolean originFound;
+        synchronized (markDyedCache) { // TODO: 实现线程安全的缓存读写
+            originFound = markDyedCache.contains(hashed);
+            if (originFound) {
+                markDyedCache.rem(hashed);
+            }
+            markDyedCache.add(hashed);
+            if (markDyedCache.size() > 512) {
+                logger().warning("清理过量的染色标记缓存");
+                markDyedCache.removeFirst();
+            }
+        }
+        logger().debug(() -> (originFound ? "续期" : "新增") + "染色标记 " + hashed);
+    }
+
+
+
+
+
+
     private void checkSize() {
         if (cache.size() > 512) {
             logger().warning("清理过量的 CMD 缓存");
@@ -192,5 +236,6 @@ public class ItemHashCache {
     public ItemHashCache() {
         cache = new Int2IntLinkedOpenHashMap();
         cache.defaultReturnValue(NOTHING);
+        markDyedCache = new IntArrayList();
     }
 }

@@ -29,6 +29,7 @@ import static org.pcub.core.common.PCUBCore.logger;
 public class PotionColorMapping implements ItemSimilarityHandler {
     public static String CMD_POTION_PREFIX = "pcubc_potion_color_";
     public static Pattern CMD_POTION_PATTERN = Pattern.compile("^%s([0-9]+)$".formatted(CMD_POTION_PREFIX));
+    public static String CMD_NOT_VANILLA_COLOR_PREFIX = "pcubc_potion_not_vanilla_color";
 
     public static BiFunction<ItemPredicateContext, DataComponents, @Nullable ItemSimilarityHandler> SIMILARITY_HANDLER_SUPPLIER = (geyserContext, components) -> {
         PotionContents potionContents = components.get(DataComponentTypes.POTION_CONTENTS);
@@ -121,12 +122,16 @@ public class PotionColorMapping implements ItemSimilarityHandler {
         if (holderString == null || stringPredicate.negated()) {
             return false;
         }
-        Matcher matcher = PotionColorMapping.CMD_POTION_PATTERN.matcher(holderString);
-        if (!matcher.find()) {
-            return false;
+        if (CMD_NOT_VANILLA_COLOR_PREFIX.equals(holderString)) {
+            recordNotVanillaColorHolder(holder);
+            return true;
         }
-        recordHolder(Integer.parseInt(matcher.group(1)), holder, holderString);
-        return true;
+        Matcher matcher = PotionColorMapping.CMD_POTION_PATTERN.matcher(holderString);
+        if (matcher.find()) {
+            recordHolder(Integer.parseInt(matcher.group(1)), holder, holderString);
+            return true;
+        }
+        return false;
     }
 
     public static MinecraftPredicate<? super ItemPredicateContext> createHolder(int color, UnaryOperator<MinecraftPredicate<? super ItemPredicateContext>> compound) {
@@ -139,6 +144,18 @@ public class PotionColorMapping implements ItemSimilarityHandler {
 
     public static MinecraftPredicate<? super ItemPredicateContext> createHolder(int color) {
         return createHolder(color, null);
+    }
+
+    public static boolean notVanillaColor(ItemPredicateContext context, DataComponents components) {
+        PotionContents potionContents = components.get(DataComponentTypes.POTION_CONTENTS);
+        return potionContents == null ||
+                potionContents.getPotionId() == -1 ||
+                potionContents.getCustomColor() != -1 ||
+                !potionContents.getCustomEffects().isEmpty();
+    }
+
+    public static void recordNotVanillaColorHolder(MinecraftPredicate<? super ItemPredicateContext> holder) {
+        AdvancedItemTranslator.recordSpecialPredicate(PotionColorMapping::notVanillaColor, holder, CMD_NOT_VANILLA_COLOR_PREFIX);
     }
 
 
